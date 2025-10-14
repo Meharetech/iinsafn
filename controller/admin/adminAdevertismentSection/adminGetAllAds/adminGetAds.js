@@ -181,6 +181,49 @@ const approvedAds = async (req, res) => {
       await fsp.unlink(watermarkedVideo).catch(() => {});
     }
 
+    // ✅ Save actually targeted reporters before updating ad
+    if (!ad.reporterId || ad.reporterId.length === 0) {
+      console.log(`🔍 Finding actually targeted reporters for ad ${ad._id}`);
+      
+      // Find reporters based on ad's targeting configuration
+      let targetReporters = [];
+      
+      if (ad.adminSelectState && ad.adminSelectState.length > 0) {
+        const query = {
+          role: "Reporter",
+          verifiedReporter: true,
+          state: { $in: ad.adminSelectState }
+        };
+        
+        if (ad.adminSelectCities && ad.adminSelectCities.length > 0) {
+          query.city = { $in: ad.adminSelectCities };
+        }
+        
+        targetReporters = await User.find(query).select("_id").session(session);
+        console.log(`🎯 Found ${targetReporters.length} reporters in admin selected states/cities`);
+      } else if (ad.adminSelectCities && ad.adminSelectCities.length > 0) {
+        targetReporters = await User.find({
+          role: "Reporter",
+          verifiedReporter: true,
+          city: { $in: ad.adminSelectCities }
+        }).select("_id").session(session);
+        console.log(`🏙️ Found ${targetReporters.length} reporters in admin selected cities`);
+      } else {
+        // Default location-based targeting
+        targetReporters = await User.find({
+          role: "Reporter",
+          verifiedReporter: true,
+          state: ad.adState,
+          city: ad.adCity
+        }).select("_id").session(session);
+        console.log(`📍 Found ${targetReporters.length} reporters in default location: ${ad.adState}, ${ad.adCity}`);
+      }
+      
+      // Save the actually targeted user IDs
+      ad.reporterId = targetReporters.map(user => user._id);
+      console.log(`💾 Saved ${targetReporters.length} actually targeted reporters for ad ${ad._id}:`, targetReporters.map(u => u._id));
+    }
+
     // ✅ Update ad with transaction
     ad.status = "approved";
     ad.approvedAt = approvedAt;
@@ -326,18 +369,70 @@ const adminModifyAds = async (req, res) => {
       }
     }
 
-    // ✅ Update ad fields
-    ad.adminSelectState = adminSelectState;
-    ad.adminSelectCities = adminSelectCities;
-    ad.adminSelectPincode = adminSelectPincode;
-    ad.reporterId = reporterId;
-    ad.allStates = allStates;
+    // ✅ Update ad fields - PRESERVE existing targeting and ADD new targeting
+    console.log(`🔄 MODIFYING Advertisement ${ad._id} - preserving all existing data`);
+    
+    // Handle states - combine existing with new
+    if (adminSelectState && adminSelectState.length > 0) {
+      const existingStates = ad.adminSelectState || [];
+      const allStates = [...new Set([...existingStates, ...adminSelectState])];
+      ad.adminSelectState = allStates;
+      console.log(`Advertisement ${ad._id} modified - combined states:`, {
+        existing: existingStates,
+        new: adminSelectState,
+        combined: allStates
+      });
+    }
+    
+    // Handle cities - combine existing with new
+    if (adminSelectCities && adminSelectCities.length > 0) {
+      const existingCities = ad.adminSelectCities || [];
+      const allCities = [...new Set([...existingCities, ...adminSelectCities])];
+      ad.adminSelectCities = allCities;
+      console.log(`Advertisement ${ad._id} modified - combined cities:`, {
+        existing: existingCities,
+        new: adminSelectCities,
+        combined: allCities
+      });
+    }
+    
+    // Handle pincode - use new if provided
+    if (adminSelectPincode) {
+      ad.adminSelectPincode = adminSelectPincode;
+      console.log(`Advertisement ${ad._id} modified with pincode:`, adminSelectPincode);
+    }
+    
+    // Handle reporters - combine existing with new
+    if (reporterId && reporterId.length > 0) {
+      const existingReporters = ad.reporterId || [];
+      const allReporters = [...new Set([...existingReporters.map(id => id.toString()), ...reporterId.map(id => id.toString())])];
+      ad.reporterId = allReporters;
+      console.log(`Advertisement ${ad._id} modified - combined reporters:`, {
+        existing: existingReporters,
+        new: reporterId,
+        combined: allReporters
+      });
+    }
+    
+    // Handle other fields
+    if (allStates !== undefined) {
+      ad.allStates = allStates;
+    }
     ad.userType = userType || "reporter"; // ✅ Set userType based on selected users
     ad.status = "modified"; // ✅ Set status to "modified" when advertisement is modified
     ad.approvedAt = approvedAt;
     ad.acceptBefore = acceptBefore;
     ad.imageUrl = updatedImageUrl;
     ad.videoUrl = updatedVideoUrl;
+    
+    // Log final targeting configuration
+    console.log(`🎯 Final targeting configuration for ${ad._id}:`, {
+      adminSelectState: ad.adminSelectState,
+      adminSelectCities: ad.adminSelectCities,
+      reporterId: ad.reporterId,
+      originalState: ad.adState,
+      originalCity: ad.adCity
+    });
     
     // ✅ Reset all reporter statuses to "pending" when advertisement is modified
     if (ad.acceptRejectReporterList && ad.acceptRejectReporterList.length > 0) {
@@ -646,19 +741,23 @@ const getAdvertisementTargetedReporters = async (req, res) => {
     })));
     console.log(`📊 Found ${adProof ? adProof.proofs.length : 0} proof submissions`);
 
-    // Only show users who were actually sent notifications (have records in acceptRejectReporterList)
-    // This matches the behavior of Raise Your Voice system
+    // Show ONLY users who were actually targeted (from reporterId array)
     const User = require("../../../../models/userModel/userModel");
     
-    console.log(`📋 Only showing users who were actually sent notifications (have records in acceptRejectReporterList)`);
+    console.log(`📋 Showing ONLY users who were actually targeted (from reporterId array)`);
     
-    // Get user IDs from acceptRejectReporterList (these are users who were actually notified)
-    const notifiedUserIds = reporterResponses.map(reporter => reporter.reporterId).filter(id => id);
-    console.log(`📋 Found ${notifiedUserIds.length} users who were actually notified:`, notifiedUserIds);
+    // Get user IDs from reporterId array (these are users who were actually targeted)
+    const targetedUserIds = advertisement.reporterId || [];
+    console.log(`📋 Found ${targetedUserIds.length} users who were actually targeted:`, targetedUserIds);
     
-    // Fetch user details for notified users only
+    // Use ONLY reporterId array - no fallback
+    const finalUserIds = targetedUserIds;
+    
+    console.log(`📋 Using ${finalUserIds.length} user IDs for display:`, finalUserIds);
+    
+    // Fetch user details for targeted users
     const targetUsers = await User.find({
-      _id: { $in: notifiedUserIds }
+      _id: { $in: finalUserIds }
     }).select("name email mobile iinsafId state city role");
     
     console.log(`✅ Final target users count (only notified users): ${targetUsers.length}`);
@@ -679,6 +778,24 @@ const getAdvertisementTargetedReporters = async (req, res) => {
           rejectNote: reporter.rejectNote || "",
           iinsafId: reporter.iinsafId,
           userRole: reporter.userRole
+        });
+      }
+    });
+    
+    // Add default "pending" status for users who haven't responded yet
+    finalUserIds.forEach(userId => {
+      if (!responseMap.has(userId.toString())) {
+        responseMap.set(userId.toString(), {
+          postStatus: "pending",
+          accepted: false,
+          rejected: false,
+          acceptedAt: null,
+          rejectedAt: null,
+          submittedAt: null,
+          completedAt: null,
+          rejectNote: "",
+          iinsafId: null,
+          userRole: null
         });
       }
     });
@@ -775,7 +892,10 @@ const getAdvertisementTargetedReporters = async (req, res) => {
           adminSelectState: advertisement.adminSelectState,
           adminSelectCities: advertisement.adminSelectCities,
           adminSelectPincode: advertisement.adminSelectPincode,
+          reporterId: advertisement.reporterId,
           userType: advertisement.userType,
+          originalState: advertisement.adState,
+          originalCity: advertisement.adCity,
           modifiedAt: advertisement.updatedAt
         }
       }

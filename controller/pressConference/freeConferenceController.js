@@ -1,5 +1,6 @@
 const FreeConference = require("../../models/pressConference/freeConference");
 const PressConferenceUser = require("../../models/pressConferenceUser/pressConferenceUser");
+const User = require("../../models/userModel/userModel");
 const notifyMatchingReporters = require("../../utils/notifyMatchingReporters");
 
 // Submit free conference
@@ -478,6 +479,28 @@ const adminAction = async (req, res) => {
         if (reporterId && reporterId.length > 0) {
           conference.reporterId = reporterId;
           console.log(`Conference ${conference.conferenceId} approved with selected reporters:`, reporterId);
+        }
+        
+        // If no specific targeting is provided, use original state/city as default and save actual targeted users
+        if ((!selectedStates || selectedStates.length === 0) && 
+            (!adminSelectCities || adminSelectCities.length === 0) && 
+            (!reporterId || reporterId.length === 0)) {
+          // Use original state and city as default targeting
+          conference.adminSelectState = [conference.state];
+          conference.adminSelectCities = [conference.city];
+          console.log(`Conference ${conference.conferenceId} approved with default targeting - state: ${conference.state}, city: ${conference.city}`);
+          
+          // Find and save the actual users who will be notified
+          const actualTargetedUsers = await User.find({
+            role: "Reporter",
+            verifiedReporter: true,
+            state: conference.state,
+            city: conference.city
+          }).select("_id");
+          
+          // Save the actual targeted user IDs
+          conference.reporterId = actualTargetedUsers.map(user => user._id);
+          console.log(`Conference ${conference.conferenceId} - saved ${actualTargetedUsers.length} actually targeted users:`, actualTargetedUsers.map(u => u._id));
         }
       } else if (action === "modified") {
         // For modification, ADD to existing targeting instead of replacing

@@ -153,14 +153,7 @@ const getPaidConferenceReporters = async (req, res) => {
         verifiedReporter: true
       }).select("name email mobile iinsafId state city");
     }
-    // Priority 2: All States flag
-    else if (conference.allStates === true) {
-      targetReporters = await User.find({ 
-        role: "Reporter",
-        verifiedReporter: true
-      }).select("name email mobile iinsafId state city");
-    }
-    // Priority 3: Admin selected states and cities
+    // Priority 2: Admin selected states and cities
     else if (conference.adminSelectState && conference.adminSelectState.length > 0) {
       const query = {
         role: "Reporter",
@@ -174,7 +167,7 @@ const getPaidConferenceReporters = async (req, res) => {
       
       targetReporters = await User.find(query).select("name email mobile iinsafId state city");
     }
-    // Priority 4: Admin selected cities only
+    // Priority 3: Admin selected cities only
     else if (conference.adminSelectCities && conference.adminSelectCities.length > 0) {
       targetReporters = await User.find({
         role: "Reporter",
@@ -182,7 +175,7 @@ const getPaidConferenceReporters = async (req, res) => {
         city: { $in: conference.adminSelectCities }
       }).select("name email mobile iinsafId state city");
     }
-    // Priority 5: Default behavior - match by original state and city
+    // Priority 4: Default behavior - match by original state and city
     else {
       targetReporters = await User.find({
         role: "Reporter",
@@ -387,146 +380,32 @@ const getPaidConferenceTargetedReporters = async (req, res) => {
       originalCity: conference.city
     });
     
-    // Find ALL reporters who have ever been targeted for this conference
+    // Show ONLY users who were actually targeted (from reporterId array)
     let allTargetedReporters = new Set(); // Use Set to avoid duplicates
     
-    // Get all responses to see which reporters have been targeted
+    // Get all responses for status mapping
     const acceptedReporters = conference.acceptedReporters || [];
     const rejectedReporters = conference.rejectedReporters || [];
     
-    // Add all reporters who have responded (they were definitely targeted)
-    [...acceptedReporters, ...rejectedReporters].forEach(reporter => {
-      if (reporter.reporterId) {
-        allTargetedReporters.add(reporter.reporterId.toString());
-        console.log(`📋 Added historical reporter: ${reporter.reporterName} (${reporter.reporterId})`);
-      }
-    });
-    
     console.log(`📋 Found ${acceptedReporters.length + rejectedReporters.length} existing responses`);
-    console.log(`📋 Historical reporters count: ${allTargetedReporters.size}`);
     
-    // For modified conferences, we need to show BOTH original and current targeting
-    if (conference.status === "modified") {
-      console.log(`🔄 Conference is MODIFIED - showing both original and current targeting`);
-      
-      // 1. Add ORIGINAL default targeting (state/city based)
-      const originalTargetReporters = await User.find({
-        role: "Reporter",
-        verifiedReporter: true,
-        state: conference.state,
-        city: conference.city
-      }).select("name email mobile iinsafId state city");
-      
-      originalTargetReporters.forEach(reporter => {
-        allTargetedReporters.add(reporter._id.toString());
-        console.log(`📍 Added ORIGINAL default reporter: ${reporter.name} (${reporter._id})`);
-      });
-      
-      console.log(`📍 Added ${originalTargetReporters.length} original default reporters`);
-      
-      // 2. Add CURRENT targeting (if different from original)
-      let currentTargetReporters = [];
-      
-      if (conference.reporterId && conference.reporterId.length > 0) {
-        // Specific reporter selection
-        currentTargetReporters = await User.find({
-          _id: { $in: conference.reporterId },
-          role: "Reporter",
-          verifiedReporter: true
-        }).select("name email mobile iinsafId state city");
-        console.log(`🎯 Found ${currentTargetReporters.length} currently selected reporters`);
-      } else if (conference.allStates === true) {
-        // All states
-        currentTargetReporters = await User.find({
-          role: "Reporter",
-          verifiedReporter: true
-        }).select("name email mobile iinsafId state city");
-        console.log(`🌍 Found ${currentTargetReporters.length} reporters (all states)`);
-      } else if (conference.adminSelectState && conference.adminSelectState.length > 0) {
-        // Admin selected states
-        const query = {
-          role: "Reporter",
-          verifiedReporter: true,
-          state: { $in: conference.adminSelectState }
-        };
-        
-        if (conference.adminSelectCities && conference.adminSelectCities.length > 0) {
-          query.city = { $in: conference.adminSelectCities };
-        }
-        
-        currentTargetReporters = await User.find(query).select("name email mobile iinsafId state city");
-        console.log(`🎯 Found ${currentTargetReporters.length} reporters in selected states/cities`);
-      } else if (conference.adminSelectCities && conference.adminSelectCities.length > 0) {
-        // Admin selected cities
-        currentTargetReporters = await User.find({
-          role: "Reporter",
-          verifiedReporter: true,
-          city: { $in: conference.adminSelectCities }
-        }).select("name email mobile iinsafId state city");
-        console.log(`🏙️ Found ${currentTargetReporters.length} reporters in selected cities`);
-      }
-      
-      // Add current targeting reporters to the set
-      currentTargetReporters.forEach(reporter => {
-        allTargetedReporters.add(reporter._id.toString());
-        console.log(`🎯 Added CURRENT targeting reporter: ${reporter.name} (${reporter._id})`);
-      });
-      
-    } else {
-      // For non-modified conferences, use normal targeting logic
-      console.log(`✅ Conference is NOT modified - using normal targeting`);
-      
-      let currentTargetReporters = [];
-      
-      if (conference.reporterId && conference.reporterId.length > 0) {
-        currentTargetReporters = await User.find({
-          _id: { $in: conference.reporterId },
-          role: "Reporter",
-          verifiedReporter: true
-        }).select("name email mobile iinsafId state city");
-        console.log(`🎯 Found ${currentTargetReporters.length} currently selected reporters`);
-      } else if (conference.allStates === true) {
-        currentTargetReporters = await User.find({
-          role: "Reporter",
-          verifiedReporter: true
-        }).select("name email mobile iinsafId state city");
-        console.log(`🌍 Found ${currentTargetReporters.length} reporters (all states)`);
-      } else if (conference.adminSelectState && conference.adminSelectState.length > 0) {
-        const query = {
-          role: "Reporter",
-          verifiedReporter: true,
-          state: { $in: conference.adminSelectState }
-        };
-        
-        if (conference.adminSelectCities && conference.adminSelectCities.length > 0) {
-          query.city = { $in: conference.adminSelectCities };
-        }
-        
-        currentTargetReporters = await User.find(query).select("name email mobile iinsafId state city");
-        console.log(`🎯 Found ${currentTargetReporters.length} reporters in selected states/cities`);
-      } else if (conference.adminSelectCities && conference.adminSelectCities.length > 0) {
-        currentTargetReporters = await User.find({
-          role: "Reporter",
-          verifiedReporter: true,
-          city: { $in: conference.adminSelectCities }
-        }).select("name email mobile iinsafId state city");
-        console.log(`🏙️ Found ${currentTargetReporters.length} reporters in selected cities`);
-      } else {
-        currentTargetReporters = await User.find({
-          role: "Reporter",
-          verifiedReporter: true,
-          state: conference.state,
-          city: conference.city
-        }).select("name email mobile iinsafId state city");
-        console.log(`📍 Found ${currentTargetReporters.length} reporters in original location`);
-      }
-      
-      // Add current targeting reporters to the set
-      currentTargetReporters.forEach(reporter => {
-        allTargetedReporters.add(reporter._id.toString());
-        console.log(`🎯 Added current reporter: ${reporter.name} (${reporter._id})`);
-      });
-    }
+    // Use ONLY reporterId array - no fallback to other targeting methods
+    console.log(`📋 Showing ONLY users who were actually targeted (from reporterId array)`);
+    
+    // Get user IDs from reporterId array (these are users who were actually targeted)
+    const targetedUserIds = conference.reporterId || [];
+    console.log(`📋 Found ${targetedUserIds.length} users who were actually targeted:`, targetedUserIds);
+    
+    // Use ONLY reporterId array - no fallback
+    const finalUserIds = targetedUserIds;
+    
+    console.log(`📋 Using ${finalUserIds.length} user IDs for display:`, finalUserIds);
+    
+    // Add all targeted user IDs to the set
+    finalUserIds.forEach(userId => {
+      allTargetedReporters.add(userId.toString());
+      console.log(`🎯 Added targeted user: ${userId}`);
+    });
     
     // Get all unique reporter IDs
     const allReporterIds = Array.from(allTargetedReporters);

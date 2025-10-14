@@ -4,6 +4,7 @@ const paymentHistory = require("../../models/paymentHistory/paymentHistory");
 const Razorpay = require("razorpay");
 const Wallet = require("../../models/Wallet/walletSchema");
 const PressConferenceUser = require("../../models/pressConferenceUser/pressConferenceUser");
+const User = require("../../models/userModel/userModel");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -562,8 +563,7 @@ const adminActionPaidConference = async (req, res) => {
       selectedStates, 
       adminSelectCities, 
       adminSelectPincode, 
-      reporterId, 
-      allStates 
+      reporterId
     } = req.body;
     const adminId = req.user._id;
 
@@ -598,6 +598,45 @@ const adminActionPaidConference = async (req, res) => {
     if (action === "approved") {
       // Calculate commission and distribute to reporters
       await handleApprovalWithCommission(conference, commissionPercentage);
+      
+      // Set targeting configuration for initial approval
+      if (selectedStates && selectedStates.length > 0) {
+        conference.adminSelectState = selectedStates;
+        console.log(`Conference ${conferenceId} approved with selected states:`, selectedStates);
+      }
+      
+      if (adminSelectCities && adminSelectCities.length > 0) {
+        conference.adminSelectCities = adminSelectCities;
+        console.log(`Conference ${conferenceId} approved with selected cities:`, adminSelectCities);
+      }
+      
+      if (reporterId && reporterId.length > 0) {
+        conference.reporterId = reporterId;
+        console.log(`Conference ${conferenceId} approved with selected reporters:`, reporterId);
+      }
+      
+      // If no specific targeting is provided, use original state/city as default
+      if ((!selectedStates || selectedStates.length === 0) && 
+          (!adminSelectCities || adminSelectCities.length === 0) && 
+          (!reporterId || reporterId.length === 0)) {
+        // Use original state and city as default targeting
+        conference.adminSelectState = [conference.state];
+        conference.adminSelectCities = [conference.city];
+        console.log(`Conference ${conferenceId} approved with default targeting - state: ${conference.state}, city: ${conference.city}`);
+        
+        // Find and save the actual users who will be notified
+        const actualTargetedUsers = await User.find({
+          role: "Reporter",
+          verifiedReporter: true,
+          state: conference.state,
+          city: conference.city
+        }).select("_id");
+        
+        // Save the actual targeted user IDs
+        conference.reporterId = actualTargetedUsers.map(user => user._id);
+        console.log(`Conference ${conferenceId} - saved ${actualTargetedUsers.length} actually targeted users:`, actualTargetedUsers.map(u => u._id));
+      }
+      
     } else if (action === "rejected") {
       // Refund full amount to user's wallet
       await handleRejectionWithRefund(conference, note);
@@ -605,44 +644,74 @@ const adminActionPaidConference = async (req, res) => {
       // Calculate commission and distribute to reporters (same as approval)
       await handleApprovalWithCommission(conference, commissionPercentage);
       
-      // Set comprehensive targeting configuration for reporter matching
-      // Set all states flag
-      if (allStates !== undefined) {
-        conference.allStates = allStates;
-        console.log(`Conference ${conferenceId} allStates set to:`, allStates);
-      }
+      // For modification, PRESERVE all existing targeting and ADD new targeting
+      console.log(`🔄 MODIFYING Conference ${conferenceId} - preserving all existing data`);
       
-      // Set selected states
+      // Handle states - combine existing with new
       if (selectedStates && selectedStates.length > 0) {
-        conference.adminSelectState = selectedStates;
-        conference.state = selectedStates[0]; // Use the first selected state for backward compatibility
-        conference.modifiedStates = selectedStates; // Store all selected states for backward compatibility
-        console.log(`Conference ${conferenceId} modified with selected states:`, selectedStates);
+        const existingStates = conference.adminSelectState || [];
+        const originalState = conference.state ? [conference.state] : [];
+        
+        // Combine original state, existing admin states, and new states
+        const allStates = [...new Set([...originalState, ...existingStates, ...selectedStates])];
+        conference.adminSelectState = allStates;
+        conference.modifiedStates = allStates; // Store for backward compatibility
+        console.log(`Conference ${conferenceId} modified - combined states:`, {
+          original: originalState,
+          existing: existingStates,
+          new: selectedStates,
+          combined: allStates
+        });
       }
       
-      // Set selected cities
+      // Handle cities - combine existing with new
       if (adminSelectCities && adminSelectCities.length > 0) {
-        conference.adminSelectCities = adminSelectCities;
-        console.log(`Conference ${conferenceId} modified with selected cities:`, adminSelectCities);
+        const existingCities = conference.adminSelectCities || [];
+        const originalCity = conference.city ? [conference.city] : [];
+        
+        // Combine original city, existing admin cities, and new cities
+        const allCities = [...new Set([...originalCity, ...existingCities, ...adminSelectCities])];
+        conference.adminSelectCities = allCities;
+        console.log(`Conference ${conferenceId} modified - combined cities:`, {
+          original: originalCity,
+          existing: existingCities,
+          new: adminSelectCities,
+          combined: allCities
+        });
       }
       
-      // Set selected pincode
+      // Handle pincode - use new if provided
       if (adminSelectPincode) {
         conference.adminSelectPincode = adminSelectPincode;
         console.log(`Conference ${conferenceId} modified with pincode:`, adminSelectPincode);
       }
       
-      // Set selected reporters
+      // Handle reporters - combine existing with new
       if (reporterId && reporterId.length > 0) {
-        conference.reporterId = reporterId;
-        console.log(`Conference ${conferenceId} modified with selected reporters:`, reporterId);
+        const existingReporters = conference.reporterId || [];
+        
+        // Combine existing and new reporter IDs
+        const allReporters = [...new Set([...existingReporters.map(id => id.toString()), ...reporterId.map(id => id.toString())])];
+        conference.reporterId = allReporters;
+        console.log(`Conference ${conferenceId} modified - combined reporters:`, {
+          existing: existingReporters,
+          new: reporterId,
+          combined: allReporters
+        });
       }
+      
+      // Log final targeting configuration
+      console.log(`🎯 Final targeting configuration for ${conferenceId}:`, {
+        adminSelectState: conference.adminSelectState,
+        adminSelectCities: conference.adminSelectCities,
+        reporterId: conference.reporterId,
+        originalState: conference.state,
+        originalCity: conference.city
+      });
 
       // Add modification timestamp for tracking
-      if (action === "modified") {
-        conference.modifiedAt = new Date();
-        console.log(`Conference ${conferenceId} marked as modified at:`, conference.modifiedAt);
-      }
+      conference.modifiedAt = new Date();
+      console.log(`Conference ${conferenceId} marked as modified at:`, conference.modifiedAt);
     }
 
     // Update conference
@@ -658,7 +727,6 @@ const adminActionPaidConference = async (req, res) => {
     
     console.log(`Conference ${conferenceId} saved with status: ${conference.status}`);
     console.log(`Targeting configuration:`, {
-      allStates: conference.allStates,
       adminSelectState: conference.adminSelectState,
       adminSelectCities: conference.adminSelectCities,
       adminSelectPincode: conference.adminSelectPincode,
@@ -1719,12 +1787,6 @@ const getCompletedPaidConferences = async (req, res) => {
             // Specific reporter selection
             allTargetedReporters = await User.find({
               _id: { $in: conference.reporterId },
-              role: "Reporter",
-              verifiedReporter: true
-            }).select("name email mobile iinsafId state city organization");
-          } else if (conference.allStates === true) {
-            // All states
-            allTargetedReporters = await User.find({
               role: "Reporter",
               verifiedReporter: true
             }).select("name email mobile iinsafId state city organization");

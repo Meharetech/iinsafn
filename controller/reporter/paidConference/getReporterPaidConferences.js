@@ -16,19 +16,22 @@ const getNewPaidConferences = async (req, res) => {
       });
     }
 
+    // Check if reporter is verified
+    if (!reporter.verifiedReporter) {
+      return res.status(403).json({
+        success: false,
+        message: "Only verified reporters can access paid conferences"
+      });
+    }
+
     const reporterState = reporter.state;
-    console.log("User state:", reporterState);
+    const reporterCity = reporter.city;
+    console.log("User state:", reporterState, "User city:", reporterCity);
 
     // Find approved paid conferences that match reporter's state
     const conferences = await PaidConference.find({
       status: { $in: ["approved", "modified"] },
       paymentStatus: "paid",
-      $or: [
-        // Match by original state
-        { state: reporterState },
-        // Match by modified states (when admin selects specific states)
-        { modifiedStates: { $in: [reporterState] } }
-      ],
       // 🔑 CRITICAL FIX: Exclude conferences where this reporter has already responded
       $and: [
         { "acceptedReporters.reporterId": { $ne: reporterId } },
@@ -38,8 +41,9 @@ const getNewPaidConferences = async (req, res) => {
     .populate('submittedBy', 'name email')
     .sort({ createdAt: -1 });
 
-    // Filter out conferences where reporter is excluded by admin
+    // Filter conferences based on comprehensive targeting logic
     const filteredConferences = conferences.filter(conference => {
+      // Check if reporter is excluded by admin
       if (conference.excludedReporters && conference.excludedReporters.length > 0) {
         const isExcluded = conference.excludedReporters.some(
           excludedId => excludedId.toString() === reporterId.toString()
@@ -49,7 +53,44 @@ const getNewPaidConferences = async (req, res) => {
           return false;
         }
       }
-      return true;
+
+      // Priority 1: Specific reporter selection
+      if (conference.reporterId && conference.reporterId.length > 0) {
+        const isSelectedReporter = conference.reporterId.includes(reporterId.toString());
+        console.log(`Conference ${conference.conferenceId} has specific reporters:`, conference.reporterId);
+        console.log(`Reporter ${reporterId} is selected: ${isSelectedReporter}`);
+        return isSelectedReporter;
+      }
+      // Priority 2: Admin selected states and cities
+      else if (conference.adminSelectState && conference.adminSelectState.length > 0) {
+        console.log(`Conference ${conference.conferenceId} has admin selected states:`, conference.adminSelectState);
+        
+        // Check if reporter's state is in admin selected states
+        const stateMatch = conference.adminSelectState.includes(reporterState);
+        console.log(`State match: ${stateMatch}`);
+        
+        // If cities are also selected, check both state and city
+        if (conference.adminSelectCities && conference.adminSelectCities.length > 0) {
+          const cityMatch = conference.adminSelectCities.includes(reporterCity);
+          console.log(`City match: ${cityMatch}`);
+          return stateMatch && cityMatch;
+        }
+        
+        return stateMatch;
+      }
+      // Priority 3: Admin selected cities only
+      else if (conference.adminSelectCities && conference.adminSelectCities.length > 0) {
+        const cityMatch = conference.adminSelectCities.includes(reporterCity);
+        console.log(`Conference ${conference.conferenceId} admin selected cities match: ${cityMatch}`);
+        return cityMatch;
+      }
+      // Priority 4: Default behavior - match by original state and city
+      else {
+        const originalStateMatch = conference.state === reporterState;
+        const originalCityMatch = conference.city === reporterCity;
+        console.log(`Conference ${conference.conferenceId} original targeting: state=${originalStateMatch}, city=${originalCityMatch}`);
+        return originalStateMatch && originalCityMatch;
+      }
     });
 
     console.log("Found paid conferences:", filteredConferences.length);
