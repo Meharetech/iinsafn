@@ -64,12 +64,25 @@ const getNewConferences = async (req, res) => {
         };
       }
 
-      // Priority 1: Specific reporter selection
+      // Priority 1: Specific reporter selection OR original targeting (for modified conferences)
       if (conference.reporterId && conference.reporterId.length > 0) {
         const isSelectedReporter = conference.reporterId.includes(reporterId.toString());
         console.log(`Conference ${conference.conferenceId} has specific reporters:`, conference.reporterId);
         console.log(`Reporter ${reporterId} is selected: ${isSelectedReporter}`);
-        return isSelectedReporter;
+        
+        // If reporter is specifically selected, return true
+        if (isSelectedReporter) {
+          return true;
+        }
+        
+        // For modified conferences, also check if reporter matches original targeting
+        if (conference.status === "modified") {
+          const originalMatch = conference.state === reporterState && conference.city === reporterCity;
+          console.log(`Modified conference - checking original targeting: ${originalMatch} (${conference.state} === ${reporterState} && ${conference.city} === ${reporterCity})`);
+          return originalMatch;
+        }
+        
+        return false;
       }
 
       // Priority 2: All States flag
@@ -91,6 +104,13 @@ const getNewConferences = async (req, res) => {
           const cityMatch = conference.adminSelectCities.includes(reporterCity);
           console.log(`City match: ${cityMatch}`);
           return stateMatch && cityMatch;
+        }
+        
+        // For modified conferences, also check original state/city if admin states don't match
+        if (!stateMatch && conference.status === "modified") {
+          const originalMatch = conference.state === reporterState && conference.city === reporterCity;
+          console.log(`Modified conference - fallback to original targeting: ${originalMatch}`);
+          return originalMatch;
         }
         
         return stateMatch;
