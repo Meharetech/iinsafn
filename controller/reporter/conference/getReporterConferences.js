@@ -38,6 +38,17 @@ const getNewConferences = async (req, res) => {
         return false;
       }
 
+      // Skip if reporter is explicitly excluded by admin
+      if (conference.excludedReporters && conference.excludedReporters.length > 0) {
+        const isExcluded = conference.excludedReporters.some(
+          excludedId => excludedId.toString() === reporterId.toString()
+        );
+        if (isExcluded) {
+          console.log(`Conference ${conference.conferenceId} - reporter ${reporterId} is excluded by admin`);
+          return false;
+        }
+      }
+
       console.log(`Checking conference ${conference.conferenceId} for reporter ${reporterId} (${reporterState}, ${reporterCity})`);
       console.log(`Conference status: ${conference.status}`);
 

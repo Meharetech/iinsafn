@@ -35,29 +35,86 @@ const approveConferenceProof = async (req, res) => {
 
     await reporterConference.save();
 
-    // Check if all accepted reporters have completed their work
+    // Check if all targeted reporters have responded (accepted/rejected)
     const FreeConference = require("../../../models/pressConference/freeConference");
-    // Get all reporters who were ever accepted (including those now completed)
-    const allAcceptedReporters = await ReporterConference.find({
-      conferenceId: reporterConference.conferenceId,
-      status: { $in: ["accepted", "completed"] }
+    const conference = await FreeConference.findOne({ 
+      conferenceId: reporterConference.conferenceId 
     });
-
-    const allCompletedReporters = await ReporterConference.find({
-      conferenceId: reporterConference.conferenceId,
-      status: "completed"
-    });
-
-    // If all accepted reporters have completed their work, mark conference as completed
-    if (allAcceptedReporters.length > 0 && allAcceptedReporters.length === allCompletedReporters.length) {
-      const conference = await FreeConference.findOne({ 
-        conferenceId: reporterConference.conferenceId 
+    
+    if (conference) {
+      // Get all reporters who have responded to this conference (accepted or rejected)
+      const allRespondedReporters = await ReporterConference.find({
+        conferenceId: reporterConference.conferenceId,
+        status: { $in: ["accepted", "rejected", "completed"] }
       });
+
+      // Get all targeted reporters for this conference
+      const User = require("../../../models/userModel/userModel");
+      let totalTargetedReporters = 0;
       
-      if (conference && conference.status === "approved") {
-        conference.status = "completed";
-        conference.completedAt = new Date();
-        await conference.save();
+      if (conference.reporterId && conference.reporterId.length > 0) {
+        // Specific reporter targeting
+        totalTargetedReporters = conference.reporterId.length;
+      } else if (conference.allStates === true) {
+        // All states targeting
+        totalTargetedReporters = await User.countDocuments({
+          role: "Reporter",
+          verifiedReporter: true
+        });
+      } else if (conference.adminSelectState && conference.adminSelectState.length > 0) {
+        // Admin selected states
+        const query = {
+          role: "Reporter",
+          verifiedReporter: true,
+          state: { $in: conference.adminSelectState }
+        };
+        
+        if (conference.adminSelectCities && conference.adminSelectCities.length > 0) {
+          query.city = { $in: conference.adminSelectCities };
+        }
+        
+        totalTargetedReporters = await User.countDocuments(query);
+      } else {
+        // Default location-based targeting
+        totalTargetedReporters = await User.countDocuments({
+          role: "Reporter",
+          verifiedReporter: true,
+          state: conference.state,
+          city: conference.city
+        });
+      }
+
+      console.log(`Conference ${reporterConference.conferenceId} completion check:`, {
+        totalTargetedReporters,
+        respondedReporters: allRespondedReporters.length,
+        allResponded: allRespondedReporters.map(r => ({ 
+          reporterId: r.reporterId, 
+          status: r.status 
+        }))
+      });
+
+      // Only mark as completed when ALL targeted reporters have responded
+      if (totalTargetedReporters > 0 && allRespondedReporters.length >= totalTargetedReporters) {
+        // Check if all accepted reporters have completed their work
+        const allAcceptedReporters = await ReporterConference.find({
+          conferenceId: reporterConference.conferenceId,
+          status: { $in: ["accepted", "completed"] }
+        });
+
+        const allCompletedReporters = await ReporterConference.find({
+          conferenceId: reporterConference.conferenceId,
+          status: "completed"
+        });
+
+        // Mark as completed only if all accepted reporters have completed their work
+        if (allAcceptedReporters.length > 0 && allAcceptedReporters.length === allCompletedReporters.length) {
+          if (conference.status === "approved" || conference.status === "modified") {
+            conference.status = "completed";
+            conference.completedAt = new Date();
+            await conference.save();
+            console.log(`Conference ${reporterConference.conferenceId} marked as completed - all targeted reporters responded and all accepted reporters completed their work`);
+          }
+        }
       }
     }
 

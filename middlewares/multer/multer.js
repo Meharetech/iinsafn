@@ -4,7 +4,12 @@ const path = require("path");
 // Storage config
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "./upload/");
+    // Check if this is a conference proof submission
+    if (req.route && req.route.path && req.route.path.includes('conference/proof')) {
+      cb(null, "./uploads/conference-proofs/");
+    } else {
+      cb(null, "./upload/");
+    }
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);

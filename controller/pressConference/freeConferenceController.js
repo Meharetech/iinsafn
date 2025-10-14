@@ -192,13 +192,142 @@ const getAllFreeConferences = async (req, res) => {
               (r) => !r.proofSubmitted || r.status === "accepted"
             ).length;
 
+            // Calculate total targeted users (all users who should have this conference in their panel)
+            let totalTargetedUsers = 0;
+            try {
+              // Find ALL reporters who should be targeted for this conference
+              let allTargetedReporters = new Set();
+              
+              // Add all reporters who have responded (they were definitely targeted)
+              allReporters.forEach(reporter => {
+                allTargetedReporters.add(reporter.reporterId.toString());
+              });
+              
+              // For modified conferences, we need to show BOTH original and current targeting
+              if (conferenceObject.status === "modified") {
+                // Add ORIGINAL default targeting (state/city based)
+                const originalTargetReporters = await User.find({
+                  role: "Reporter",
+                  verifiedReporter: true,
+                  state: conferenceObject.state,
+                  city: conferenceObject.city
+                }).select("_id");
+                
+                originalTargetReporters.forEach(reporter => {
+                  allTargetedReporters.add(reporter._id.toString());
+                });
+                
+                // Add CURRENT targeting (if different from original)
+                let currentTargetReporters = [];
+                
+                if (conferenceObject.reporterId && conferenceObject.reporterId.length > 0) {
+                  // Specific reporter selection
+                  currentTargetReporters = await User.find({
+                    _id: { $in: conferenceObject.reporterId },
+                    role: "Reporter",
+                    verifiedReporter: true
+                  }).select("_id");
+                } else if (conferenceObject.allStates === true) {
+                  // All states
+                  currentTargetReporters = await User.find({
+                    role: "Reporter",
+                    verifiedReporter: true
+                  }).select("_id");
+                } else if (conferenceObject.adminSelectState && conferenceObject.adminSelectState.length > 0) {
+                  // Admin selected states
+                  const query = {
+                    role: "Reporter",
+                    verifiedReporter: true,
+                    state: { $in: conferenceObject.adminSelectState }
+                  };
+                  
+                  if (conferenceObject.adminSelectCities && conferenceObject.adminSelectCities.length > 0) {
+                    query.city = { $in: conferenceObject.adminSelectCities };
+                  }
+                  
+                  currentTargetReporters = await User.find(query).select("_id");
+                } else if (conferenceObject.adminSelectCities && conferenceObject.adminSelectCities.length > 0) {
+                  // Admin selected cities
+                  currentTargetReporters = await User.find({
+                    role: "Reporter",
+                    verifiedReporter: true,
+                    city: { $in: conferenceObject.adminSelectCities }
+                  }).select("_id");
+                }
+                
+                // Add current targeting reporters to the set
+                currentTargetReporters.forEach(reporter => {
+                  allTargetedReporters.add(reporter._id.toString());
+                });
+              } else {
+                // For non-modified conferences, use normal targeting logic
+                let currentTargetReporters = [];
+                
+                if (conferenceObject.reporterId && conferenceObject.reporterId.length > 0) {
+                  currentTargetReporters = await User.find({
+                    _id: { $in: conferenceObject.reporterId },
+                    role: "Reporter",
+                    verifiedReporter: true
+                  }).select("_id");
+                } else if (conferenceObject.allStates === true) {
+                  currentTargetReporters = await User.find({
+                    role: "Reporter",
+                    verifiedReporter: true
+                  }).select("_id");
+                } else if (conferenceObject.adminSelectState && conferenceObject.adminSelectState.length > 0) {
+                  const query = {
+                    role: "Reporter",
+                    verifiedReporter: true,
+                    state: { $in: conferenceObject.adminSelectState }
+                  };
+                  
+                  if (conferenceObject.adminSelectCities && conferenceObject.adminSelectCities.length > 0) {
+                    query.city = { $in: conferenceObject.adminSelectCities };
+                  }
+                  
+                  currentTargetReporters = await User.find(query).select("_id");
+                } else if (conferenceObject.adminSelectCities && conferenceObject.adminSelectCities.length > 0) {
+                  currentTargetReporters = await User.find({
+                    role: "Reporter",
+                    verifiedReporter: true,
+                    city: { $in: conferenceObject.adminSelectCities }
+                  }).select("_id");
+                } else {
+                  currentTargetReporters = await User.find({
+                    role: "Reporter",
+                    verifiedReporter: true,
+                    state: conferenceObject.state,
+                    city: conferenceObject.city
+                  }).select("_id");
+                }
+                
+                // Add current targeting reporters to the set
+                currentTargetReporters.forEach(reporter => {
+                  allTargetedReporters.add(reporter._id.toString());
+                });
+              }
+              
+              // Filter out excluded reporters
+              const excludedReporterIds = conferenceObject.excludedReporters || [];
+              const filteredTargetedReporters = Array.from(allTargetedReporters).filter(reporterId => 
+                !excludedReporterIds.some(excludedId => excludedId.toString() === reporterId)
+              );
+              
+              totalTargetedUsers = filteredTargetedReporters.length;
+            } catch (targetingError) {
+              console.error("Error calculating total targeted users:", targetingError);
+              // Fallback to current logic
+              totalTargetedUsers = reporterDetails.length;
+            }
+
             return {
               ...conferenceObject,
               allReporters: reporterDetails,
               acceptedReporters: reporterDetails.filter(r => r.status === "accepted" || r.status === "completed"),
               pendingReporters: reporterDetails.filter(r => r.status === "pending"),
               rejectedReporters: reporterDetails.filter(r => r.status === "rejected"),
-              totalReporters: reporterDetails.length,
+              totalReporters: totalTargetedUsers, // Total targeted users (all users in panel)
+              totalRespondedReporters: reporterDetails.length, // Total who responded
               totalAcceptedReporters: acceptedReporters.length,
               totalPendingReporters: pendingReporters.length,
               totalRejectedReporters: rejectedReporters.length,
@@ -624,37 +753,102 @@ const markConferenceCompleted = async (req, res) => {
       });
     }
 
-    // Check if all accepted reporters have submitted and had their proofs approved
+    // Check if all targeted reporters have responded and all accepted reporters have completed their work
     const ReporterConference = require("../../models/reporterConference/reporterConference");
-    const acceptedReporters = await ReporterConference.find({
+    const User = require("../../models/userModel/userModel");
+    
+    // Get all reporters who have responded to this conference (accepted or rejected)
+    const allRespondedReporters = await ReporterConference.find({
       conferenceId: conferenceId,
-      status: "accepted"
+      status: { $in: ["accepted", "rejected", "completed"] }
     });
 
-    const completedReporters = await ReporterConference.find({
-      conferenceId: conferenceId,
-      status: "completed"
-    });
-
-    // If all accepted reporters have completed their work, mark conference as completed
-    if (acceptedReporters.length > 0 && acceptedReporters.length === completedReporters.length) {
-      conference.status = "completed";
-      conference.completedAt = new Date();
-      await conference.save();
-
-      return res.status(200).json({
-        success: true,
-        message: "Conference marked as completed",
-        data: {
-          conferenceId: conference.conferenceId,
-          status: conference.status,
-          completedAt: conference.completedAt,
-        },
+    // Get all targeted reporters for this conference
+    let totalTargetedReporters = 0;
+    
+    if (conference.reporterId && conference.reporterId.length > 0) {
+      // Specific reporter targeting
+      totalTargetedReporters = conference.reporterId.length;
+    } else if (conference.allStates === true) {
+      // All states targeting
+      totalTargetedReporters = await User.countDocuments({
+        role: "Reporter",
+        verifiedReporter: true
       });
+    } else if (conference.adminSelectState && conference.adminSelectState.length > 0) {
+      // Admin selected states
+      const query = {
+        role: "Reporter",
+        verifiedReporter: true,
+        state: { $in: conference.adminSelectState }
+      };
+      
+      if (conference.adminSelectCities && conference.adminSelectCities.length > 0) {
+        query.city = { $in: conference.adminSelectCities };
+      }
+      
+      totalTargetedReporters = await User.countDocuments(query);
+    } else {
+      // Default location-based targeting
+      totalTargetedReporters = await User.countDocuments({
+        role: "Reporter",
+        verifiedReporter: true,
+        state: conference.state,
+        city: conference.city
+      });
+    }
+
+    console.log(`Manual completion check for conference ${conferenceId}:`, {
+      totalTargetedReporters,
+      respondedReporters: allRespondedReporters.length,
+      allResponded: allRespondedReporters.map(r => ({ 
+        reporterId: r.reporterId, 
+        status: r.status 
+      }))
+    });
+
+    // Only mark as completed when ALL targeted reporters have responded
+    if (totalTargetedReporters > 0 && allRespondedReporters.length >= totalTargetedReporters) {
+      // Check if all accepted reporters have completed their work
+      const acceptedReporters = await ReporterConference.find({
+        conferenceId: conferenceId,
+        status: { $in: ["accepted", "completed"] }
+      });
+
+      const completedReporters = await ReporterConference.find({
+        conferenceId: conferenceId,
+        status: "completed"
+      });
+
+      // Mark as completed only if all accepted reporters have completed their work
+      if (acceptedReporters.length > 0 && acceptedReporters.length === completedReporters.length) {
+        conference.status = "completed";
+        conference.completedAt = new Date();
+        await conference.save();
+
+        return res.status(200).json({
+          success: true,
+          message: "Conference marked as completed - all targeted reporters responded and all accepted reporters completed their work",
+          data: {
+            conferenceId: conference.conferenceId,
+            status: conference.status,
+            completedAt: conference.completedAt,
+            totalTargetedReporters,
+            respondedReporters: allRespondedReporters.length,
+            acceptedReporters: acceptedReporters.length,
+            completedReporters: completedReporters.length
+          },
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot mark as completed. ${acceptedReporters.length - completedReporters.length} accepted reporters haven't completed their work yet.`,
+        });
+      }
     } else {
       return res.status(400).json({
         success: false,
-        message: "Cannot mark as completed. Some reporters haven't completed their work yet.",
+        message: `Cannot mark as completed. Only ${allRespondedReporters.length} out of ${totalTargetedReporters} targeted reporters have responded.`,
       });
     }
   } catch (error) {

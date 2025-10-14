@@ -41,7 +41,21 @@ const acceptConference = async (req, res) => {
       });
     }
 
-    // 3. Check if already handled
+    // 3. Check if reporter is excluded by admin
+    if (conference.excludedReporters && conference.excludedReporters.length > 0) {
+      const isExcluded = conference.excludedReporters.some(
+        excludedId => excludedId.toString() === reporterId.toString()
+      );
+      if (isExcluded) {
+        console.log(`Reporter ${reporterId} is excluded from conference ${conferenceId} by admin`);
+        return res.status(403).json({
+          success: false,
+          message: "This conference is not available for you. You have been removed from this conference by the admin.",
+        });
+      }
+    }
+
+    // 4. Check if already handled
     const existingEntry = await ReporterConference.findOne({
       conferenceId: conferenceId,
       reporterId: reporterId,
@@ -141,7 +155,21 @@ const rejectConference = async (req, res) => {
       });
     }
 
-    // 2. Check if already handled
+    // 2. Check if reporter is excluded by admin
+    if (conference.excludedReporters && conference.excludedReporters.length > 0) {
+      const isExcluded = conference.excludedReporters.some(
+        excludedId => excludedId.toString() === reporterId.toString()
+      );
+      if (isExcluded) {
+        console.log(`Reporter ${reporterId} is excluded from conference ${conferenceId} by admin`);
+        return res.status(403).json({
+          success: false,
+          message: "This conference is not available for you. You have been removed from this conference by the admin.",
+        });
+      }
+    }
+
+    // 3. Check if already handled
     const existingEntry = await ReporterConference.findOne({
       conferenceId: conferenceId,
       reporterId: reporterId,

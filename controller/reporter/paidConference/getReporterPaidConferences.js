@@ -38,10 +38,24 @@ const getNewPaidConferences = async (req, res) => {
     .populate('submittedBy', 'name email')
     .sort({ createdAt: -1 });
 
-    console.log("Found paid conferences:", conferences.length);
+    // Filter out conferences where reporter is excluded by admin
+    const filteredConferences = conferences.filter(conference => {
+      if (conference.excludedReporters && conference.excludedReporters.length > 0) {
+        const isExcluded = conference.excludedReporters.some(
+          excludedId => excludedId.toString() === reporterId.toString()
+        );
+        if (isExcluded) {
+          console.log(`Reporter ${reporterId} is excluded from paid conference ${conference.conferenceId} by admin`);
+          return false;
+        }
+      }
+      return true;
+    });
+
+    console.log("Found paid conferences:", filteredConferences.length);
     
     // Debug: Log commission details for each conference
-    conferences.forEach((conf, index) => {
+    filteredConferences.forEach((conf, index) => {
       console.log(`Conference ${index + 1} (${conf.conferenceId}):`, {
         paymentAmount: conf.paymentAmount,
         numberOfReporters: conf.numberOfReporters,
@@ -55,7 +69,7 @@ const getNewPaidConferences = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: conferences
+      data: filteredConferences
     });
   } catch (error) {
     console.error("Error fetching new paid conferences:", error);

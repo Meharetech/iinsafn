@@ -67,9 +67,30 @@ const submitConferenceProof = async (req, res) => {
     });
 
     if (!reporterConference) {
+      // Debug: Check if any record exists for this conference and reporter
+      const anyRecord = await ReporterConference.findOne({
+        conferenceId: conferenceId,
+        reporterId: reporterId
+      });
+      
+      console.log("Debug - Looking for conference:", {
+        conferenceId,
+        reporterId: reporterId.toString(),
+        foundAccepted: !!reporterConference,
+        foundAny: !!anyRecord,
+        anyRecordStatus: anyRecord?.status
+      });
+      
+      if (anyRecord) {
+        return res.status(400).json({
+          success: false,
+          message: `Conference found but status is '${anyRecord.status}'. Only accepted conferences can submit proof.`,
+        });
+      }
+      
       return res.status(404).json({
         success: false,
-        message: "Accepted conference not found",
+        message: "Accepted conference not found. Please make sure you have accepted this conference first.",
       });
     }
 
