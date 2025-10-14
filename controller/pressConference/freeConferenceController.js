@@ -457,32 +457,84 @@ const adminAction = async (req, res) => {
         console.log(`Conference ${conference.conferenceId} allStates set to:`, allStates);
       }
       
-      // Set selected states
-      if (selectedStates && selectedStates.length > 0) {
-        conference.adminSelectState = selectedStates;
-        console.log(`Conference ${conference.conferenceId} modified with selected states:`, selectedStates);
-      }
-      
-      // Set selected cities
-      if (adminSelectCities && adminSelectCities.length > 0) {
-        conference.adminSelectCities = adminSelectCities;
-        console.log(`Conference ${conference.conferenceId} modified with selected cities:`, adminSelectCities);
-      }
-      
-      // Set selected pincode
-      if (adminSelectPincode) {
-        conference.adminSelectPincode = adminSelectPincode;
-        console.log(`Conference ${conference.conferenceId} modified with pincode:`, adminSelectPincode);
-      }
-      
-      // Set selected reporters
-      if (reporterId && reporterId.length > 0) {
-        conference.reporterId = reporterId;
-        console.log(`Conference ${conference.conferenceId} modified with selected reporters:`, reporterId);
-      }
-
-      // Add modification timestamp for tracking
-      if (action === "modified") {
+      // Handle targeting configuration - preserve existing when modifying
+      if (action === "approved") {
+        // For approval, set new targeting
+        if (selectedStates && selectedStates.length > 0) {
+          conference.adminSelectState = selectedStates;
+          console.log(`Conference ${conference.conferenceId} approved with selected states:`, selectedStates);
+        }
+        
+        if (adminSelectCities && adminSelectCities.length > 0) {
+          conference.adminSelectCities = adminSelectCities;
+          console.log(`Conference ${conference.conferenceId} approved with selected cities:`, adminSelectCities);
+        }
+        
+        if (adminSelectPincode) {
+          conference.adminSelectPincode = adminSelectPincode;
+          console.log(`Conference ${conference.conferenceId} approved with pincode:`, adminSelectPincode);
+        }
+        
+        if (reporterId && reporterId.length > 0) {
+          conference.reporterId = reporterId;
+          console.log(`Conference ${conference.conferenceId} approved with selected reporters:`, reporterId);
+        }
+      } else if (action === "modified") {
+        // For modification, ADD to existing targeting instead of replacing
+        
+        // Handle states - combine existing with new
+        if (selectedStates && selectedStates.length > 0) {
+          const existingStates = conference.adminSelectState || [];
+          const originalState = conference.state ? [conference.state] : [];
+          
+          // Combine original state, existing admin states, and new states
+          const allStates = [...new Set([...originalState, ...existingStates, ...selectedStates])];
+          conference.adminSelectState = allStates;
+          console.log(`Conference ${conference.conferenceId} modified - combined states:`, {
+            original: originalState,
+            existing: existingStates,
+            new: selectedStates,
+            combined: allStates
+          });
+        }
+        
+        // Handle cities - combine existing with new
+        if (adminSelectCities && adminSelectCities.length > 0) {
+          const existingCities = conference.adminSelectCities || [];
+          const originalCity = conference.city ? [conference.city] : [];
+          
+          // Combine original city, existing admin cities, and new cities
+          const allCities = [...new Set([...originalCity, ...existingCities, ...adminSelectCities])];
+          conference.adminSelectCities = allCities;
+          console.log(`Conference ${conference.conferenceId} modified - combined cities:`, {
+            original: originalCity,
+            existing: existingCities,
+            new: adminSelectCities,
+            combined: allCities
+          });
+        }
+        
+        // Handle pincode - use new if provided
+        if (adminSelectPincode) {
+          conference.adminSelectPincode = adminSelectPincode;
+          console.log(`Conference ${conference.conferenceId} modified with pincode:`, adminSelectPincode);
+        }
+        
+        // Handle reporters - combine existing with new
+        if (reporterId && reporterId.length > 0) {
+          const existingReporters = conference.reporterId || [];
+          
+          // Combine existing and new reporter IDs
+          const allReporters = [...new Set([...existingReporters.map(id => id.toString()), ...reporterId.map(id => id.toString())])];
+          conference.reporterId = allReporters;
+          console.log(`Conference ${conference.conferenceId} modified - combined reporters:`, {
+            existing: existingReporters,
+            new: reporterId,
+            combined: allReporters
+          });
+        }
+        
+        // Add modification timestamp for tracking
         conference.modifiedAt = new Date();
         console.log(`Conference ${conference.conferenceId} marked as modified at:`, conference.modifiedAt);
       }
