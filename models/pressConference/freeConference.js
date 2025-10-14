@@ -74,6 +74,10 @@ const freeConferenceSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Reporter",
     }],
+    excludedReporters: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Reporter",
+    }],
     allStates: {
       type: Boolean,
       default: false,

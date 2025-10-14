@@ -267,12 +267,12 @@ const getPaidConferenceReporters = async (req, res) => {
   }
 };
 
-// Delete reporter from paid conference
+// Delete reporter from paid conference - completely remove from targeting and responses
 const deleteReporterFromPaidConference = async (req, res) => {
   try {
     const { conferenceId, reporterId } = req.params;
     
-    console.log(`🗑️ Deleting reporter ${reporterId} from paid conference ${conferenceId}`);
+    console.log(`🗑️ Completely deleting reporter ${reporterId} from paid conference ${conferenceId}`);
     
     const conference = await PaidConference.findOne({ conferenceId: conferenceId });
     
@@ -283,26 +283,71 @@ const deleteReporterFromPaidConference = async (req, res) => {
       });
     }
 
-    // Remove from accepted reporters
+    let removedFromTargeted = false;
+    let removedFromAccepted = false;
+    let removedFromRejected = false;
+
+    // 1. Remove from accepted reporters
+    const originalAcceptedCount = conference.acceptedReporters.length;
     conference.acceptedReporters = conference.acceptedReporters.filter(
       reporter => reporter.reporterId.toString() !== reporterId
     );
+    removedFromAccepted = conference.acceptedReporters.length < originalAcceptedCount;
 
-    // Remove from rejected reporters
+    // 2. Remove from rejected reporters
+    const originalRejectedCount = conference.rejectedReporters.length;
     conference.rejectedReporters = conference.rejectedReporters.filter(
       reporter => reporter.reporterId.toString() !== reporterId
     );
+    removedFromRejected = conference.rejectedReporters.length < originalRejectedCount;
+
+    console.log(`📊 Response removal: Accepted=${removedFromAccepted}, Rejected=${removedFromRejected}`);
+
+    // 3. Remove from targeting configuration
+    if (conference.reporterId && conference.reporterId.length > 0) {
+      // Specific reporter targeting - remove from reporterId array
+      const originalTargetedCount = conference.reporterId.length;
+      conference.reporterId = conference.reporterId.filter(
+        id => id.toString() !== reporterId
+      );
+      removedFromTargeted = conference.reporterId.length < originalTargetedCount;
+      console.log(`🎯 Removed from specific targeting: ${removedFromTargeted}, Original: ${originalTargetedCount}, New: ${conference.reporterId.length}`);
+    } else {
+      // Location-based targeting - add to exclusion list
+      if (!conference.excludedReporters) {
+        conference.excludedReporters = [];
+      }
+      
+      // Check if already excluded
+      const alreadyExcluded = conference.excludedReporters.some(
+        id => id.toString() === reporterId
+      );
+      
+      if (!alreadyExcluded) {
+        conference.excludedReporters.push(reporterId);
+        removedFromTargeted = true;
+        console.log(`🚫 Added to exclusion list for location-based targeting`);
+      }
+    }
 
     await conference.save();
     
     console.log(`✅ Successfully deleted reporter ${reporterId} from paid conference ${conferenceId}`);
+    console.log(`📊 Removal summary:`, {
+      removedFromTargeted,
+      removedFromAccepted, 
+      removedFromRejected
+    });
     
     res.status(200).json({
       success: true,
-      message: "Reporter removed from paid conference successfully",
+      message: "Reporter completely removed from paid conference successfully",
       data: {
         conferenceId: conferenceId,
-        reporterId: reporterId
+        reporterId: reporterId,
+        removedFromTargeted,
+        removedFromAccepted,
+        removedFromRejected
       }
     });
     
@@ -497,6 +542,15 @@ const getPaidConferenceTargetedReporters = async (req, res) => {
     
     console.log(`✅ Final target reporters count: ${targetReporters.length}`);
     
+    // Filter out excluded reporters
+    const excludedReporterIds = conference.excludedReporters || [];
+    const filteredTargetReporters = targetReporters.filter(reporter => 
+      !excludedReporterIds.some(excludedId => excludedId.toString() === reporter._id.toString())
+    );
+    
+    console.log(`🚫 Excluded reporters: ${excludedReporterIds.length}`);
+    console.log(`✅ Final filtered target reporters count: ${filteredTargetReporters.length}`);
+    
     // Create a map of responses by reporter ID
     const responseMap = {};
     
@@ -519,8 +573,8 @@ const getPaidConferenceTargetedReporters = async (req, res) => {
       };
     });
     
-    // Combine target reporters with their response status
-    const reportersWithStatus = targetReporters.map(reporter => {
+    // Combine target reporters with their response status (excluding removed reporters)
+    const reportersWithStatus = filteredTargetReporters.map(reporter => {
       const response = responseMap[reporter._id.toString()];
       return {
         reporterId: reporter._id,
@@ -553,7 +607,7 @@ const getPaidConferenceTargetedReporters = async (req, res) => {
       message: "Paid conference targeted reporters fetched successfully",
       data: {
         conferenceId: conferenceId,
-        totalTargetedReporters: targetReporters.length,
+        totalTargetedReporters: filteredTargetReporters.length,
         pending: groupedReporters.pending.length,
         accepted: groupedReporters.accepted.length,
         rejected: groupedReporters.rejected.length,

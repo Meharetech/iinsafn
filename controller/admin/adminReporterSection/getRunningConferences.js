@@ -303,7 +303,7 @@ const getConferenceReporters = async (req, res) => {
   }
 };
 
-// Delete reporter from conference
+// Delete reporter from conference - completely remove from targeting and responses
 const deleteReporterFromConference = async (req, res) => {
   try {
     const { conferenceId, reporterId } = req.params;
@@ -311,10 +311,23 @@ const deleteReporterFromConference = async (req, res) => {
     console.log(`🗑️ Deleting reporter ${reporterId} from conference ${conferenceId}`);
     console.log(`📊 Parameters - conferenceId: "${conferenceId}", reporterId: "${reporterId}"`);
     
-    // Find and delete the reporter conference record
-    const ReporterConference = require("../../../models/reporterConference/reporterConference");
+    // Find the conference
+    const FreeConference = require("../../../models/pressConference/freeConference");
+    const conference = await FreeConference.findOne({ conferenceId: conferenceId });
     
-    // First, let's check if the record exists
+    if (!conference) {
+      return res.status(404).json({
+        success: false,
+        message: "Free conference not found",
+      });
+    }
+
+    let removedFromTargeted = false;
+    let removedFromAccepted = false;
+    let removedFromRejected = false;
+
+    // 1. Remove from accepted reporters (ReporterConference records)
+    const ReporterConference = require("../../../models/reporterConference/reporterConference");
     const mongoose = require("mongoose");
     const queryReporterId = new mongoose.Types.ObjectId(reporterId);
     
@@ -323,98 +336,70 @@ const deleteReporterFromConference = async (req, res) => {
       reporterId: queryReporterId
     });
     
-    console.log(`🔍 Existing record found:`, existingRecord ? "YES" : "NO");
     if (existingRecord) {
-      console.log(`📋 Record details:`, {
-        _id: existingRecord._id,
-        conferenceId: existingRecord.conferenceId,
-        reporterId: existingRecord.reporterId,
-        status: existingRecord.status
-      });
-    } else {
-      // Check if this reporter was even targeted for this conference
-      const FreeConference = require("../../../models/pressConference/freeConference");
-      const conference = await FreeConference.findOne({ conferenceId: conferenceId });
-      
-      if (!conference) {
-        return res.status(404).json({
-          success: false,
-          message: "Conference not found",
-        });
-      }
-      
-      // Check if reporter was targeted
-      let isTargeted = false;
-      
-      if (conference.reporterId && conference.reporterId.length > 0) {
-        isTargeted = conference.reporterId.some(id => id.toString() === reporterId);
-      } else if (conference.allStates === true) {
-        isTargeted = true;
-      } else if (conference.adminSelectState && conference.adminSelectState.length > 0) {
-        // Check if reporter's state matches
-        const User = require("../../../models/userModel/userModel");
-        const reporter = await User.findById(reporterId);
-        if (reporter) {
-          isTargeted = conference.adminSelectState.includes(reporter.state);
-        }
-      }
-      
-      if (!isTargeted) {
-        return res.status(404).json({
-          success: false,
-          message: "This reporter was not targeted for this conference",
-        });
-      }
-      
-      return res.status(400).json({
-        success: false,
-        message: "This reporter has not responded to the conference yet. Only reporters who have accepted or rejected can be removed.",
-      });
-    }
-    
-    // Delete the existing record
-    let deleteResult;
-    
-    try {
-      deleteResult = await ReporterConference.deleteOne({
+      console.log(`📋 Found existing record with status: ${existingRecord.status}`);
+      const deleteResult = await ReporterConference.deleteOne({
         conferenceId: conferenceId,
         reporterId: queryReporterId
       });
       
-      console.log(`🔍 Delete result: deletedCount = ${deleteResult.deletedCount}`);
-      
-    } catch (deleteError) {
-      console.error(`❌ Delete error:`, deleteError);
-      return res.status(500).json({
-        success: false,
-        message: "Error during deletion process",
-      });
+      if (deleteResult.deletedCount > 0) {
+        if (existingRecord.status === "accepted") {
+          removedFromAccepted = true;
+        } else if (existingRecord.status === "rejected") {
+          removedFromRejected = true;
+        }
+        console.log(`✅ Removed from ReporterConference with status: ${existingRecord.status}`);
+      }
+    } else {
+      console.log(`📋 No existing ReporterConference record found`);
     }
-    
-    if (deleteResult.deletedCount === 0) {
-      // Let's also check what records exist for this conference
-      const allRecordsForConference = await ReporterConference.find({ conferenceId: conferenceId });
-      console.log(`📊 All records for conference ${conferenceId}:`, allRecordsForConference.map(r => ({
-        reporterId: r.reporterId,
-        reporterIdType: typeof r.reporterId,
-        status: r.status
-      })));
+
+    console.log(`📊 Response removal: Accepted=${removedFromAccepted}, Rejected=${removedFromRejected}`);
+
+    // 2. Remove from targeting configuration
+    if (conference.reporterId && conference.reporterId.length > 0) {
+      // Specific reporter targeting - remove from reporterId array
+      const originalTargetedCount = conference.reporterId.length;
+      conference.reporterId = conference.reporterId.filter(
+        id => id.toString() !== reporterId
+      );
+      removedFromTargeted = conference.reporterId.length < originalTargetedCount;
+      console.log(`🎯 Removed from specific targeting: ${removedFromTargeted}, Original: ${originalTargetedCount}, New: ${conference.reporterId.length}`);
+    } else {
+      // Location-based targeting - add to exclusion list
+      if (!conference.excludedReporters) {
+        conference.excludedReporters = [];
+      }
       
-      return res.status(404).json({
-        success: false,
-        message: "Reporter not found in this conference",
-      });
+      // Check if already excluded
+      const alreadyExcluded = conference.excludedReporters.some(
+        id => id.toString() === reporterId
+      );
+      
+      if (!alreadyExcluded) {
+        conference.excludedReporters.push(reporterId);
+        removedFromTargeted = true;
+        console.log(`🚫 Added to exclusion list for location-based targeting`);
+      }
     }
+
+    // 3. Save the updated conference
+    await conference.save();
     
-    console.log(`✅ Successfully deleted reporter ${reporterId} from conference ${conferenceId}`);
+    console.log(`✅ Successfully processed deletion for reporter ${reporterId} from conference ${conferenceId}`);
+    console.log(`📊 Final status - Targeted: ${removedFromTargeted}, Accepted: ${removedFromAccepted}, Rejected: ${removedFromRejected}`);
     
     res.status(200).json({
       success: true,
-      message: "Reporter removed from conference successfully",
+      message: "Reporter completely removed from conference successfully",
       data: {
         conferenceId: conferenceId,
         reporterId: reporterId,
-        deletedCount: deleteResult.deletedCount
+        removedFromTargeted: removedFromTargeted,
+        removedFromAccepted: removedFromAccepted,
+        removedFromRejected: removedFromRejected,
+        targetingType: conference.reporterId && conference.reporterId.length > 0 ? "specific" : "location-based"
       }
     });
     
@@ -611,7 +596,16 @@ const getConferenceTargetedReporters = async (req, res) => {
       verifiedReporter: true
     }).select("name email mobile iinsafId state city");
     
-    console.log(`✅ Final target reporters count: ${targetReporters.length}`);
+    console.log(`✅ Initial target reporters count: ${targetReporters.length}`);
+    
+    // Filter out excluded reporters
+    const excludedReporterIds = conference.excludedReporters || [];
+    const filteredTargetReporters = targetReporters.filter(reporter => 
+      !excludedReporterIds.some(excludedId => excludedId.toString() === reporter._id.toString())
+    );
+    
+    console.log(`🚫 Excluded reporters: ${excludedReporterIds.length}`);
+    console.log(`✅ Final filtered target reporters count: ${filteredTargetReporters.length}`);
     
     // Get all responses for this conference (already fetched above)
     const allResponses = existingResponses;
@@ -629,8 +623,8 @@ const getConferenceTargetedReporters = async (req, res) => {
       };
     });
     
-    // Combine target reporters with their response status
-    const reportersWithStatus = targetReporters.map(reporter => {
+    // Combine target reporters with their response status (excluding removed reporters)
+    const reportersWithStatus = filteredTargetReporters.map(reporter => {
       const response = responseMap[reporter._id.toString()];
       return {
         reporterId: reporter._id,
@@ -663,7 +657,7 @@ const getConferenceTargetedReporters = async (req, res) => {
       message: "Conference targeted reporters fetched successfully",
       data: {
         conferenceId: conferenceId,
-        totalTargetedReporters: targetReporters.length,
+        totalTargetedReporters: filteredTargetReporters.length,
         pending: groupedReporters.pending.length,
         accepted: groupedReporters.accepted.length,
         rejected: groupedReporters.rejected.length,
@@ -676,6 +670,7 @@ const getConferenceTargetedReporters = async (req, res) => {
           adminSelectCities: conference.adminSelectCities,
           adminSelectPincode: conference.adminSelectPincode,
           reporterId: conference.reporterId,
+          excludedReporters: conference.excludedReporters,
           originalState: conference.state,
           originalCity: conference.city,
           modifiedAt: conference.modifiedAt
