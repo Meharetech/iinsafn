@@ -28,9 +28,9 @@ const getNewPaidConferences = async (req, res) => {
     const reporterCity = reporter.city;
     console.log("User state:", reporterState, "User city:", reporterCity);
 
-    // Find approved paid conferences that match reporter's state
+    // Find ALL paid conferences that match reporter's targeting (regardless of status)
+    // This includes: approved, modified, running, completed, etc. - any conference that was sent to this reporter
     const conferences = await PaidConference.find({
-      status: { $in: ["approved", "modified"] },
       paymentStatus: "paid",
       // 🔑 CRITICAL FIX: Exclude conferences where this reporter has already responded
       $and: [
@@ -145,7 +145,8 @@ const getAcceptedPaidConferences = async (req, res) => {
       "acceptedReporters.reporterId": reporterId,
       $or: [
         { status: "running" },
-        { status: "approved" }
+        { status: "approved" },
+        { status: "modified" }
       ]
     })
     .populate('submittedBy', 'name email')
@@ -157,12 +158,25 @@ const getAcceptedPaidConferences = async (req, res) => {
         "acceptedReporters.reporterId": reporterId,
         $or: [
           { status: "running" },
-          { status: "approved" }
+          { status: "approved" },
+          { status: "modified" }
         ]
       }
     });
 
     console.log("Found accepted paid conferences:", conferences.length);
+    
+    // Debug: Log each conference found
+    conferences.forEach((conf, index) => {
+      console.log(`Accepted Conference ${index + 1}:`, {
+        conferenceId: conf.conferenceId,
+        status: conf.status,
+        topic: conf.topic,
+        hasAcceptedReporters: !!conf.acceptedReporters,
+        acceptedReportersCount: conf.acceptedReporters?.length || 0,
+        reporterInAccepted: conf.acceptedReporters?.some(r => r.reporterId.toString() === reporterId.toString())
+      });
+    });
 
     // Process conferences to include reporter-specific data
     const processedConferences = conferences.map(conference => {
@@ -171,8 +185,30 @@ const getAcceptedPaidConferences = async (req, res) => {
         reporter => reporter.reporterId.toString() === reporterId.toString()
       );
       
+      // Debug logging for data structure
+      console.log(`Processing conference ${conference.conferenceId}:`, {
+        status: conference.status,
+        hasTopic: !!conference.topic,
+        hasPurpose: !!conference.purpose,
+        hasReporterAcceptance: !!reporterAcceptance,
+        proofStatus: reporterAcceptance?.proof?.status,
+        proofSubmitted: reporterAcceptance?.proofSubmitted
+      });
+      
       return {
         ...conference.toObject(),
+        // Direct field access for backward compatibility
+        topic: conference.topic,
+        purpose: conference.purpose,
+        conferenceDate: conference.conferenceDate,
+        conferenceTime: conference.conferenceTime,
+        timePeriod: conference.timePeriod,
+        state: conference.state,
+        city: conference.city,
+        place: conference.place,
+        landmark: conference.landmark,
+        adminNote: conference.adminNote,
+        // Reporter-specific data
         acceptedAt: reporterAcceptance?.acceptedAt,
         proofSubmitted: reporterAcceptance?.proofSubmitted || false,
         proof: reporterAcceptance?.proof,
@@ -180,6 +216,7 @@ const getAcceptedPaidConferences = async (req, res) => {
         adminRejectNote: reporterAcceptance?.proof?.adminNote || null,
         rejectedAt: reporterAcceptance?.proof?.rejectedAt || null,
         canResubmit: reporterAcceptance?.proof?.status === "rejected",
+        // Conference details object for frontend compatibility
         conferenceDetails: {
           topic: conference.topic,
           purpose: conference.purpose,
@@ -234,8 +271,21 @@ const getRejectedPaidConferences = async (req, res) => {
       
       return {
         ...conference.toObject(),
+        // Direct field access for backward compatibility
+        topic: conference.topic,
+        purpose: conference.purpose,
+        conferenceDate: conference.conferenceDate,
+        conferenceTime: conference.conferenceTime,
+        timePeriod: conference.timePeriod,
+        state: conference.state,
+        city: conference.city,
+        place: conference.place,
+        landmark: conference.landmark,
+        adminNote: conference.adminNote,
+        // Reporter-specific data
         rejectedAt: reporterRejection?.rejectedAt,
         rejectNote: reporterRejection?.rejectNote,
+        // Conference details object for frontend compatibility
         conferenceDetails: {
           topic: conference.topic,
           purpose: conference.purpose,
@@ -297,12 +347,26 @@ const getCompletedPaidConferences = async (req, res) => {
       
       return {
         ...conference.toObject(),
+        // Direct field access for backward compatibility
+        topic: conference.topic,
+        purpose: conference.purpose,
+        conferenceDate: conference.conferenceDate,
+        conferenceTime: conference.conferenceTime,
+        timePeriod: conference.timePeriod,
+        state: conference.state,
+        city: conference.city,
+        place: conference.place,
+        landmark: conference.landmark,
+        adminNote: conference.adminNote,
+        // Reporter-specific data
         acceptedAt: reporterAcceptance?.acceptedAt,
         proofSubmitted: reporterAcceptance?.proofSubmitted || false,
         proof: reporterAcceptance?.proof,
+        proofStatus: reporterAcceptance?.proof?.status || "approved",
         earnings: earnings,
         amountEarned: earnings,
         completedAt: reporterAcceptance?.proof?.approvedAt || conference.updatedAt,
+        // Conference details object for frontend compatibility
         conferenceDetails: {
           topic: conference.topic,
           purpose: conference.purpose,
@@ -350,27 +414,27 @@ const getPaidConferenceStats = async (req, res) => {
 
     const reporterState = reporter.state;
 
-    // Count new paid conferences
+    // Count new paid conferences (all statuses that were sent to this reporter)
     const newCount = await PaidConference.countDocuments({
-      status: "approved",
-      state: reporterState,
-      paymentStatus: "paid"
+      paymentStatus: "paid",
+      // This is a simplified count - actual filtering happens in getNewPaidConferences
+      state: reporterState
     });
 
     // Count accepted paid conferences
     const acceptedCount = await PaidConference.countDocuments({
-      "acceptedUsers.reporterId": reporterId,
-      status: "running"
+      "acceptedReporters.reporterId": reporterId,
+      status: { $in: ["running", "approved", "modified"] }
     });
 
     // Count rejected paid conferences
     const rejectedCount = await PaidConference.countDocuments({
-      "rejectedUsers.reporterId": reporterId
+      "rejectedReporters.reporterId": reporterId
     });
 
     // Count completed paid conferences
     const completedCount = await PaidConference.countDocuments({
-      "acceptedUsers.reporterId": reporterId,
+      "acceptedReporters.reporterId": reporterId,
       status: "completed"
     });
 
