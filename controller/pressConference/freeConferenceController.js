@@ -503,38 +503,19 @@ const adminAction = async (req, res) => {
           console.log(`Conference ${conference.conferenceId} - saved ${actualTargetedUsers.length} actually targeted users:`, actualTargetedUsers.map(u => u._id));
         }
       } else if (action === "modified") {
-        // For modification, ADD to existing targeting instead of replacing
+        // For modification, REPLACE targeting with new selection only (don't combine with original)
+        console.log(`🔄 MODIFYING Conference ${conference.conferenceId} - using ONLY new targeting`);
         
-        // Handle states - combine existing with new
+        // Handle states - use ONLY new selected states
         if (selectedStates && selectedStates.length > 0) {
-          const existingStates = conference.adminSelectState || [];
-          const originalState = conference.state ? [conference.state] : [];
-          
-          // Combine original state, existing admin states, and new states
-          const allStates = [...new Set([...originalState, ...existingStates, ...selectedStates])];
-          conference.adminSelectState = allStates;
-          console.log(`Conference ${conference.conferenceId} modified - combined states:`, {
-            original: originalState,
-            existing: existingStates,
-            new: selectedStates,
-            combined: allStates
-          });
+          conference.adminSelectState = selectedStates;
+          console.log(`Conference ${conference.conferenceId} modified - NEW states only:`, selectedStates);
         }
         
-        // Handle cities - combine existing with new
+        // Handle cities - use ONLY new selected cities
         if (adminSelectCities && adminSelectCities.length > 0) {
-          const existingCities = conference.adminSelectCities || [];
-          const originalCity = conference.city ? [conference.city] : [];
-          
-          // Combine original city, existing admin cities, and new cities
-          const allCities = [...new Set([...originalCity, ...existingCities, ...adminSelectCities])];
-          conference.adminSelectCities = allCities;
-          console.log(`Conference ${conference.conferenceId} modified - combined cities:`, {
-            original: originalCity,
-            existing: existingCities,
-            new: adminSelectCities,
-            combined: allCities
-          });
+          conference.adminSelectCities = adminSelectCities;
+          console.log(`Conference ${conference.conferenceId} modified - NEW cities only:`, adminSelectCities);
         }
         
         // Handle pincode - use new if provided
@@ -543,18 +524,21 @@ const adminAction = async (req, res) => {
           console.log(`Conference ${conference.conferenceId} modified with pincode:`, adminSelectPincode);
         }
         
-        // Handle reporters - combine existing with new
+        // Handle reporters - use ONLY new selected reporters
         if (reporterId && reporterId.length > 0) {
-          const existingReporters = conference.reporterId || [];
-          
-          // Combine existing and new reporter IDs
-          const allReporters = [...new Set([...existingReporters.map(id => id.toString()), ...reporterId.map(id => id.toString())])];
-          conference.reporterId = allReporters;
-          console.log(`Conference ${conference.conferenceId} modified - combined reporters:`, {
-            existing: existingReporters,
-            new: reporterId,
-            combined: allReporters
-          });
+          conference.reporterId = reporterId;
+          console.log(`Conference ${conference.conferenceId} modified - NEW reporters only:`, reporterId);
+        }
+        
+        // If no specific targeting is provided, clear all targeting to prevent original location matching
+        if ((!selectedStates || selectedStates.length === 0) && 
+            (!adminSelectCities || adminSelectCities.length === 0) && 
+            (!reporterId || reporterId.length === 0)) {
+          console.log(`Conference ${conference.conferenceId} modified with no new targeting - clearing all targeting`);
+          conference.adminSelectState = [];
+          conference.adminSelectCities = [];
+          conference.reporterId = [];
+          conference.allStates = false;
         }
         
         // Add modification timestamp for tracking
