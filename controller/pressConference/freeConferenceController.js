@@ -510,12 +510,18 @@ const adminAction = async (req, res) => {
         if (selectedStates && selectedStates.length > 0) {
           conference.adminSelectState = selectedStates;
           console.log(`Conference ${conference.conferenceId} modified - NEW states only:`, selectedStates);
+        } else {
+          // Clear state targeting if no states provided
+          conference.adminSelectState = [];
         }
         
         // Handle cities - use ONLY new selected cities
         if (adminSelectCities && adminSelectCities.length > 0) {
           conference.adminSelectCities = adminSelectCities;
           console.log(`Conference ${conference.conferenceId} modified - NEW cities only:`, adminSelectCities);
+        } else {
+          // Clear city targeting if no cities provided
+          conference.adminSelectCities = [];
         }
         
         // Handle pincode - use new if provided
@@ -539,6 +545,7 @@ const adminAction = async (req, res) => {
           conference.adminSelectCities = [];
           conference.reporterId = [];
           conference.allStates = false;
+          console.log(`Conference ${conference.conferenceId} - All targeting cleared to prevent original location matching`);
         }
         
         // Add modification timestamp for tracking

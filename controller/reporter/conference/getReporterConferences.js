@@ -75,11 +75,10 @@ const getNewConferences = async (req, res) => {
           return true;
         }
         
-        // For modified conferences, also check if reporter matches original targeting
+        // For modified conferences, DO NOT check original targeting - only use new targeting
         if (conference.status === "modified") {
-          const originalMatch = conference.state === reporterState && conference.city === reporterCity;
-          console.log(`Modified conference - checking original targeting: ${originalMatch} (${conference.state} === ${reporterState} && ${conference.city} === ${reporterCity})`);
-          return originalMatch;
+          console.log(`Modified conference - NOT checking original targeting, only using new targeting`);
+          return false;
         }
         
         return false;
@@ -106,11 +105,10 @@ const getNewConferences = async (req, res) => {
           return stateMatch && cityMatch;
         }
         
-        // For modified conferences, also check original state/city if admin states don't match
+        // For modified conferences, DO NOT fallback to original targeting - only use new targeting
         if (!stateMatch && conference.status === "modified") {
-          const originalMatch = conference.state === reporterState && conference.city === reporterCity;
-          console.log(`Modified conference - fallback to original targeting: ${originalMatch}`);
-          return originalMatch;
+          console.log(`Modified conference - NOT falling back to original targeting, only using new targeting`);
+          return false;
         }
         
         return stateMatch;
@@ -132,7 +130,12 @@ const getNewConferences = async (req, res) => {
         return false;
       }
 
-      // Priority 6: Default behavior - match by original state and city
+      // Priority 6: Default behavior - match by original state and city (ONLY for non-modified conferences)
+      if (conference.status === "modified") {
+        console.log(`Modified conference ${conference.conferenceId} - NOT using default original targeting`);
+        return false;
+      }
+      
       const defaultMatch = conference.state === reporterState && conference.city === reporterCity;
       console.log(`Default match for ${conference.conferenceId}: ${defaultMatch} (${conference.state} === ${reporterState} && ${conference.city} === ${reporterCity})`);
       return defaultMatch;
