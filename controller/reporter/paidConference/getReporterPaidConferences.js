@@ -323,9 +323,9 @@ const getCompletedPaidConferences = async (req, res) => {
     console.log("Getting completed paid conferences for reporter:", reporterId);
 
     // Find paid conferences where this reporter has completed their work (proof approved)
+    // This should include conferences from any status (approved, modified, running) that have approved proofs
     const conferences = await PaidConference.find({
       "acceptedReporters.reporterId": reporterId,
-      "acceptedReporters.status": "completed",
       "acceptedReporters.proofSubmitted": true,
       "acceptedReporters.proof.status": "approved"
     })
@@ -333,6 +333,19 @@ const getCompletedPaidConferences = async (req, res) => {
     .sort({ createdAt: -1 });
 
     console.log("Found completed paid conferences:", conferences.length);
+    
+    // Debug: Log each completed conference found
+    conferences.forEach((conf, index) => {
+      console.log(`Completed Conference ${index + 1}:`, {
+        conferenceId: conf.conferenceId,
+        status: conf.status,
+        topic: conf.topic,
+        hasAcceptedReporters: !!conf.acceptedReporters,
+        acceptedReportersCount: conf.acceptedReporters?.length || 0,
+        reporterInAccepted: conf.acceptedReporters?.some(r => r.reporterId.toString() === reporterId.toString()),
+        reporterProofStatus: conf.acceptedReporters?.find(r => r.reporterId.toString() === reporterId.toString())?.proof?.status
+      });
+    });
 
     // Process conferences to include reporter-specific data and earnings
     const processedConferences = conferences.map(conference => {
