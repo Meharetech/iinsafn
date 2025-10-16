@@ -40,7 +40,7 @@ const proofSchema = new mongoose.Schema({
   },
   status: { 
     type: String,
-    enum: ['pending', 'submitted', 'approved', 'rejected', 'completed'],
+    enum: ['pending', 'accepted', 'submitted', 'approved', 'rejected', 'completed'],
     default: 'submitted'
   },
   adminRejectNote: {

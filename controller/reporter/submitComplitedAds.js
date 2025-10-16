@@ -1,5 +1,7 @@
 const Adpost = require("../../models/advertismentPost/advertisementPost");
 const reporterAdProof = require("../../models/reporterAdProof/reporterAdProof");
+const uploadToCloudinary = require("../../utils/uploadToCloudinary");
+const fs = require("fs");
 
 const getYouTubeViewCount = require("../../utils/getYouTubeViewCount");
 const getFacebookViewCount = require("../../utils/getFacebookViewCount");
@@ -12,25 +14,43 @@ const submitComplitedAds = async (req, res) => {
     
     const reporterId = req.user._id;
     const { platform, videoUrl, adId } = req.body;
-    const screenshotPath = req.file?.path;
+    const screenshotFile = req.file;
 
     console.log("Extracted data:", {
       reporterId,
       platform,
       videoUrl,
       adId,
-      screenshotPath
+      hasScreenshotFile: !!screenshotFile
     });
 
     // ✅ Validate required fields
-    if (!platform || !videoUrl || !adId || !screenshotPath) {
+    if (!platform || !videoUrl || !adId || !screenshotFile) {
       console.error("❌ Missing required fields:", {
         platform: !!platform,
         videoUrl: !!videoUrl,
         adId: !!adId,
-        screenshotPath: !!screenshotPath
+        hasScreenshotFile: !!screenshotFile
       });
       return res.status(400).json({ message: "Platform, videoUrl, adId, and screenshot are required" });
+    }
+
+    // ✅ Upload screenshot to Cloudinary
+    let screenshotUrl = null;
+    try {
+      console.log("Uploading completion screenshot to Cloudinary...");
+      const cloudinaryResult = await uploadToCloudinary(screenshotFile.path, "ads/completion-screenshots");
+      screenshotUrl = cloudinaryResult.secure_url;
+      console.log("Completion screenshot uploaded successfully:", screenshotUrl);
+      
+      // ✅ Delete local file after successful upload
+      if (fs.existsSync(screenshotFile.path)) {
+        fs.unlinkSync(screenshotFile.path);
+        console.log("Local file deleted:", screenshotFile.path);
+      }
+    } catch (uploadError) {
+      console.error("Cloudinary upload error:", uploadError);
+      return res.status(500).json({ message: "Failed to upload completion screenshot" });
     }
 
     // ✅ 1. Get Ad post details
@@ -83,18 +103,18 @@ const submitComplitedAds = async (req, res) => {
     console.log("💾 Updating proof in database:", {
       adId,
       reporterId,
-      screenshotPath
+      screenshotUrl
     });
     
     const updatedDoc = await reporterAdProof.findOneAndUpdate(
       {
         adId,
         "proofs.reporterId": reporterId,
-        "proofs.status": { $in: ["pending", "rejected"] },
+        "proofs.status": { $in: ["accepted", "rejected"] },
       },
       {
         $set: {
-          "proofs.$.completedTaskScreenshot": screenshotPath,
+          "proofs.$.completedTaskScreenshot": screenshotUrl, // ✅ Use Cloudinary URL
           "proofs.$.completionSubmittedAt": new Date(),
           "proofs.$.status": "submitted", // ✅ Set status to "submitted" for admin review
         }
@@ -109,6 +129,23 @@ const submitComplitedAds = async (req, res) => {
       console.error("❌ Proof not found or already completed");
       return res.status(404).json({ message: "Proof not found or already completed" });
     }
+
+    // ✅ Update reporter's status in the ad to show proof is submitted
+    await Adpost.updateOne(
+      { _id: adId, "acceptRejectReporterList.reporterId": reporterId },
+      {
+        $set: {
+          "acceptRejectReporterList.$.postStatus": "proof_submitted",
+          "acceptRejectReporterList.$.submittedAt": new Date(),
+        },
+        $unset: {
+          "acceptRejectReporterList.$.rejectedAt": 1,
+          "acceptRejectReporterList.$.rejectNote": 1,
+          "acceptRejectReporterList.$.adminRejectedBy": 1,
+          "acceptRejectReporterList.$.adminRejectedByName": 1,
+        },
+      }
+    );
 
     res.status(200).json({
       success: true,

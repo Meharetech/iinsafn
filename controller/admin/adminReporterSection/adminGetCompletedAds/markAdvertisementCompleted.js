@@ -1,0 +1,262 @@
+const Adpost = require("../../../../models/advertismentPost/advertisementPost");
+const reporterAdProof = require("../../../../models/reporterAdProof/reporterAdProof");
+const User = require("../../../../models/userModel/userModel");
+const Wallet = require("../../../../models/Wallet/walletSchema");
+const mongoose = require("mongoose");
+
+const markAdvertisementCompleted = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { adId } = req.params;
+    const adminId = req.user.id;
+    const adminName = req.user.name;
+
+    if (!adId) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Advertisement ID is required"
+      });
+    }
+
+    console.log("🚀 Marking advertisement as completed:", adId);
+    console.log("👤 Admin:", adminName, "ID:", adminId);
+
+    // Find the advertisement
+    const advertisement = await Adpost.findById(adId).populate('owner', 'name email organization mobile iinsafId role');
+    
+    if (!advertisement) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Advertisement not found"
+      });
+    }
+
+    console.log("📊 Advertisement found:", advertisement._id);
+
+    // Find all proofs for this advertisement
+    const allProofs = await reporterAdProof.find({ adId: adId }).populate('proofs.reporterId', 'name email iinsafId role');
+    
+    console.log("📋 Total proofs found:", allProofs.length);
+    console.log("📋 Total assigned reporters:", advertisement.acceptRejectReporterList?.length || 0);
+
+    const completionResults = {
+      adId: advertisement._id,
+      totalReporters: advertisement.requiredReporter || 0,
+      completedReporters: 0,
+      rejectedReporters: 0,
+      refundedReporters: 0,
+      totalRefundAmount: 0,
+      refundDetails: [],
+      rejectedDetails: []
+    };
+
+    // Process only the required number of reporters (take first N reporters from the list)
+    const requiredReporters = (advertisement.acceptRejectReporterList || []).slice(0, advertisement.requiredReporter || 0);
+    
+    console.log("📋 Required reporters:", advertisement.requiredReporter);
+    console.log("📋 Total assigned reporters:", advertisement.acceptRejectReporterList?.length || 0);
+    console.log("📋 Processing first", requiredReporters.length, "reporters");
+
+    for (const assignedReporter of requiredReporters) {
+      // Find if this reporter has submitted any proof
+      let reporterProof = null;
+      for (const proofDoc of allProofs) {
+        reporterProof = proofDoc.proofs.find(p => 
+          p.reporterId && p.reporterId._id.toString() === assignedReporter.reporterId.toString()
+        );
+        if (reporterProof) break;
+      }
+        
+        const reporterName = assignedReporter.reporterId?.name || 'Unknown';
+        const reporterEmail = assignedReporter.reporterId?.email || 'Unknown';
+        const refundAmount = advertisement.finalReporterPrice || 0;
+
+        // Check completion status - ONLY completed and admin approved work is considered complete
+        if (reporterProof && reporterProof.status === "completed" && reporterProof.adminApprovedAt) {
+          completionResults.completedReporters++;
+          console.log(`✅ Reporter ${reporterName} completed work successfully`);
+        } else {
+          // ALL other statuses are considered incomplete and need refund
+          completionResults.rejectedReporters++;
+          
+          let rejectReason = "";
+          if (!reporterProof) {
+            rejectReason = "No proof submitted - incomplete task";
+          } else if (reporterProof.status === "rejected") {
+            rejectReason = "Work rejected by admin - incomplete task";
+          } else if (reporterProof.status === "submitted" && !reporterProof.adminApprovedAt) {
+            rejectReason = "Proof submitted but not approved by admin - incomplete task";
+          } else if (reporterProof.status === "accepted") {
+            rejectReason = "Initial proof accepted but completion work not submitted - incomplete task";
+          } else if (reporterProof.status === "pending") {
+            rejectReason = "Initial proof submitted but completion work not submitted - incomplete task";
+          } else {
+            rejectReason = "No proof submitted - incomplete task";
+          }
+
+          // Update proof status to rejected (only if proof exists)
+          if (reporterProof) {
+            await reporterAdProof.updateOne(
+              { 
+                adId: adId,
+                "proofs.reporterId": assignedReporter.reporterId
+              },
+              {
+                $set: {
+                  "proofs.$.status": "rejected",
+                  "proofs.$.adminRejectedAt": new Date(),
+                  "proofs.$.adminRejectedBy": adminId,
+                  "proofs.$.adminRejectedByName": adminName,
+                  "proofs.$.adminRejectNote": `Advertisement marked as completed. ${rejectReason}. You did not complete your work on time.`
+                }
+              },
+              { session }
+            );
+          }
+
+          // Update Adpost status
+          await Adpost.updateOne(
+            { 
+              _id: adId,
+              "acceptRejectReporterList.reporterId": assignedReporter.reporterId
+            },
+            {
+              $set: {
+                "acceptRejectReporterList.$.postStatus": "rejected",
+                "acceptRejectReporterList.$.rejectedAt": new Date(),
+                "acceptRejectReporterList.$.adminRejectedBy": adminId,
+                "acceptRejectReporterList.$.adminRejectedByName": adminName,
+                "acceptRejectReporterList.$.rejectNote": `Advertisement marked as completed. ${rejectReason}. You did not complete your work on time.`
+              }
+            },
+            { session }
+          );
+
+          completionResults.refundedReporters++;
+          completionResults.totalRefundAmount += refundAmount;
+          completionResults.refundDetails.push({
+            reporterId: assignedReporter.reporterId,
+            reporterName: reporterName,
+            reporterEmail: reporterEmail,
+            amount: refundAmount,
+            reason: rejectReason
+          });
+
+          console.log(`💰 Will refund ₹${refundAmount} to advertiser for incomplete work by ${reporterName}`);
+
+          completionResults.rejectedDetails.push({
+            reporterId: assignedReporter.reporterId,
+            reporterName: reporterName,
+            reporterEmail: reporterEmail,
+            reason: rejectReason
+          });
+
+          console.log(`❌ Rejected reporter ${reporterName}: ${rejectReason}`);
+        }
+    }
+
+    // Process refunds to advertiser wallet if any
+    if (completionResults.totalRefundAmount > 0) {
+      try {
+        console.log(`💰 Processing total refund of ₹${completionResults.totalRefundAmount} to advertiser`);
+        
+        // Find or create advertiser wallet
+        let advertiserWallet = await Wallet.findOne({ userId: advertisement.owner._id });
+        
+        if (!advertiserWallet) {
+          advertiserWallet = new Wallet({
+            userId: advertisement.owner._id,
+            userType: "Advertiser",
+            balance: 0,
+            transactions: []
+          });
+        }
+
+        // Add refund transaction
+        advertiserWallet.balance += completionResults.totalRefundAmount;
+        advertiserWallet.transactions.push({
+          type: "credit",
+          amount: completionResults.totalRefundAmount,
+          description: `Refund for incomplete work by ${completionResults.refundedReporters} reporter(s) in advertisement ${advertisement._id}`,
+          date: new Date(),
+          status: "success"
+        });
+
+        await advertiserWallet.save({ session });
+        
+        console.log(`✅ Successfully refunded ₹${completionResults.totalRefundAmount} to advertiser wallet`);
+        console.log(`💰 New wallet balance: ₹${advertiserWallet.balance}`);
+
+      } catch (refundError) {
+        console.error(`❌ Error processing refund to advertiser wallet:`, refundError);
+        // Don't fail the entire operation if refund fails
+      }
+    }
+
+    // Mark advertisement as completed
+    await Adpost.updateOne(
+      { _id: adId },
+      {
+        $set: {
+          status: "completed",
+          completedAt: new Date(),
+          completedBy: adminId,
+          completedByName: adminName,
+          completionDetails: {
+            totalReporters: completionResults.totalReporters,
+            completedReporters: completionResults.completedReporters,
+            rejectedReporters: completionResults.rejectedReporters,
+            refundedReporters: completionResults.refundedReporters,
+            totalRefundAmount: completionResults.totalRefundAmount
+          }
+        }
+      },
+      { session }
+    );
+
+    // Commit transaction
+    await session.commitTransaction();
+
+    const response = {
+      success: true,
+      message: "Advertisement marked as completed successfully",
+      data: {
+        ...completionResults,
+        advertisement: {
+          adId: advertisement._id,
+          status: "completed",
+          completedAt: new Date(),
+          completedBy: adminId,
+          completedByName: adminName
+        }
+      }
+    };
+
+    console.log("✅ Advertisement completion results:", {
+      totalReporters: completionResults.totalReporters,
+      completedReporters: completionResults.completedReporters,
+      rejectedReporters: completionResults.rejectedReporters,
+      refundedReporters: completionResults.refundedReporters,
+      totalRefundAmount: completionResults.totalRefundAmount
+    });
+
+    res.status(200).json(response);
+
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("❌ Error marking advertisement as completed:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+module.exports = markAdvertisementCompleted;

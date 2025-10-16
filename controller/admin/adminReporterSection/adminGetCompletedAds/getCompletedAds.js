@@ -90,6 +90,12 @@ const adminApproveAdsProof = async (req, res) => {
           "acceptRejectReporterList.$.postStatus": "completed",
           "acceptRejectReporterList.$.completedAt": new Date(),
         },
+        $unset: {
+          "acceptRejectReporterList.$.rejectedAt": 1,
+          "acceptRejectReporterList.$.rejectNote": 1,
+          "acceptRejectReporterList.$.adminRejectedBy": 1,
+          "acceptRejectReporterList.$.adminRejectedByName": 1,
+        },
       },
       { session }
     );
@@ -261,7 +267,7 @@ async function adminRejectAdsProof(req, res) {
       { _id: adId, "acceptRejectReporterList.reporterId": reporterId },
       {
         $set: {
-          "acceptRejectReporterList.$.postStatus": "pending", // Reset to pending (initial proof is still valid)
+          "acceptRejectReporterList.$.postStatus": "proof_rejected", // Set to proof_rejected status
           "acceptRejectReporterList.$.adProof": true, // Keep adProof as true (initial proof exists)
           "acceptRejectReporterList.$.rejectedAt": new Date(),
           "acceptRejectReporterList.$.rejectNote": adminNote || "Completion screenshot rejected by admin",
@@ -317,25 +323,64 @@ async function adminRejectAdsProof(req, res) {
 
 const getFinalCompletedAds = async (req, res) => {
   try {
-    // Step 1: Find documents where at least one proof is completed
+    // Step 1: Find documents where at least one proof is completed and populate advertisement details
     const completedAds = await reporterAdProof.find({
       proofs: {
         $elemMatch: {
           status: "completed",
         },
       },
+    }).populate({
+      path: 'adId',
+      populate: {
+        path: 'owner',
+        select: 'name email organization mobile iinsafId role'
+      }
     });
 
-    // Step 2: For each matching ad, filter only the proofs with completed status
+    // Step 2: For each matching ad, filter only the proofs with completed status and merge advertisement details
     const filteredAds = completedAds.map((ad) => {
       const matchingProofs = ad.proofs.filter(
         (proof) => proof.status === "completed"
       );
 
-      return {
-        ...ad._doc, // keep original ad fields
-        proofs: matchingProofs, // replace with only completed proofs
+      // Merge advertisement details with proof data
+      const advertisementDetails = ad.adId ? {
+        // Advertisement basic info
+        adId: ad.adId._id,
+        mediaDescription: ad.adId.mediaDescription,
+        mediaType: ad.adId.mediaType,
+        adState: ad.adId.adState,
+        adCity: ad.adId.adCity,
+        allStates: ad.adId.allStates,
+        userType: ad.adId.userType,
+        requiredViews: ad.adId.requiredViews,
+        baseView: ad.adId.baseView,
+        requiredReporter: ad.adId.requiredReporter,
+        finalReporterPrice: ad.adId.finalReporterPrice,
+        adminCommission: ad.adId.adminCommission,
+        adCommissionRate: ad.adId.adCommissionRate,
+        totalCost: ad.adId.totalCost,
+        createdAt: ad.adId.createdAt,
+        updatedAt: ad.adId.updatedAt,
+        status: ad.adId.status,
+        
+        // Owner/Advertiser details
+        owner: ad.adId.owner,
+        
+        // Proof-related data from reporterAdProof
+        proofs: matchingProofs,
+        runningAdStatus: ad.runningAdStatus,
+        adType: ad.adType,
+      } : {
+        // Fallback if adId is not populated
+        adId: ad.adId,
+        proofs: matchingProofs,
+        runningAdStatus: ad.runningAdStatus,
+        adType: ad.adType,
       };
+
+      return advertisementDetails;
     });
 
     res.status(200).json({

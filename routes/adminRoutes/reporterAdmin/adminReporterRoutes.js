@@ -26,6 +26,9 @@ const {
   getFinalCompletedAds
 } = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/getCompletedAds");
 
+const getAdvertisementCompletionDetails = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/getAdvertisementCompletionDetails");
+const markAdvertisementCompleted = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/markAdvertisementCompleted");
+
 const adminAuthenticate = require("../../../middlewares/adminAuthenticate/adminAuthenticate");
 const verifyAdminAccess = require("../../../middlewares/adminAuthenticate/verifyAdminAccess");
 const isSuperAdmin = require("../../../middlewares/adminAuthenticate/isSuperAdmin");
@@ -167,6 +170,19 @@ router.get("/admin/get/final/completed/ads",
   adminAuthenticate,
   verifyAdminAccess("reporter"),
   getFinalCompletedAds
+)
+
+// Advertisement completion management routes
+router.get("/admin/get/advertisement/:adId/completion-details",
+  adminAuthenticate,
+  verifyAdminAccess("reporter"),
+  getAdvertisementCompletionDetails
+)
+
+router.put("/admin/mark/advertisement/:adId/completed",
+  adminAuthenticate,
+  verifyAdminAccess("reporter"),
+  markAdvertisementCompleted
 )
 
 

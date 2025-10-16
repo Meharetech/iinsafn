@@ -149,7 +149,7 @@ const advertisementSchema = new mongoose.Schema(
         },
         postStatus: {
           type: String,
-          enum: ["pending", "accepted", "submitted", "completed", "rejected"],
+          enum: ["pending", "accepted", "submitted", "completed", "rejected", "proof_submitted", "proof_rejected"],
           default: "pending",
         },
         accepted: {

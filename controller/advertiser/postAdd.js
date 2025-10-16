@@ -279,12 +279,23 @@ const postAdd = async (req, res) => {
 
     const commissionRate = pricing.adCommission;
     const totalCost = parseFloat(body.totalCost);
-    const requiredReporter = parseInt(body.requiredReporter);
+    const requiredViews = parseInt(body.requiredViews);
+    const baseView = pricing.baseView || 1000; // Default to 1000 if not set
+    
+    // ✅ Calculate requiredReporter based on requiredViews and baseView
+    const requiredReporter = Math.ceil(requiredViews / baseView);
+    
+    console.log("📊 View Distribution Calculation:", {
+      requiredViews,
+      baseView,
+      calculatedRequiredReporter: requiredReporter,
+      viewsPerReporter: baseView
+    });
 
     if (!requiredReporter || requiredReporter <= 0) {
       return res.status(400).json({
         success: false,
-        message: "RequiredReporter must be a valid number greater than 0",
+        message: "Invalid required views or base view configuration",
       });
     }
 
@@ -303,6 +314,8 @@ const postAdd = async (req, res) => {
       adminCommission,
       finalReporterPrice,
       adCommissionRate: commissionRate,
+      baseView: baseView, // ✅ Store baseView for view distribution
+      requiredReporter: requiredReporter, // ✅ Store calculated requiredReporter
     });
 
     await newAd.save();
@@ -371,8 +384,16 @@ const postAdd = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Ad created",
-      data: newAd,
+      message: "Ad created successfully with view distribution calculated",
+      data: {
+        ...newAd.toObject(),
+        viewDistribution: {
+          totalRequiredViews: requiredViews,
+          baseViewPerReporter: baseView,
+          totalReportersNeeded: requiredReporter,
+          viewsPerReporter: baseView
+        }
+      },
     });
   } catch (error) {
     console.error("❌ Error in postAdd:", error);
