@@ -6,12 +6,30 @@ const getFacebookViewCount = require("../../utils/getFacebookViewCount");
 
 const submitComplitedAds = async (req, res) => {
   try {
+    console.log("🚀 submitComplitedAds called");
+    console.log("Request body:", req.body);
+    console.log("Request file:", req.file);
+    
     const reporterId = req.user._id;
     const { platform, videoUrl, adId } = req.body;
     const screenshotPath = req.file?.path;
 
+    console.log("Extracted data:", {
+      reporterId,
+      platform,
+      videoUrl,
+      adId,
+      screenshotPath
+    });
+
     // ✅ Validate required fields
     if (!platform || !videoUrl || !adId || !screenshotPath) {
+      console.error("❌ Missing required fields:", {
+        platform: !!platform,
+        videoUrl: !!videoUrl,
+        adId: !!adId,
+        screenshotPath: !!screenshotPath
+      });
       return res.status(400).json({ message: "Platform, videoUrl, adId, and screenshot are required" });
     }
 
@@ -27,17 +45,29 @@ const submitComplitedAds = async (req, res) => {
     }
 
     // ✅ 2. Fetch current views
+    console.log("📊 Fetching current views for platform:", platform);
     let currentViews = null;
-    if (platform.toLowerCase() === "youtube") {
-      currentViews = await getYouTubeViewCount(videoUrl, process.env.YOUTUBE_API_KEY);
-    } else if (platform.toLowerCase() === "facebook") {
-      const rawViews = await getFacebookViewCount(videoUrl);
-      currentViews = parseInt(rawViews.toString().replace(/[^\d]/g, ""), 10);
-    } else {
-      return res.status(400).json({ message: "Unsupported platform" });
+    try {
+      if (platform.toLowerCase() === "youtube") {
+        console.log("📺 Fetching YouTube views for:", videoUrl);
+        currentViews = await getYouTubeViewCount(videoUrl, process.env.YOUTUBE_API_KEY);
+        console.log("📺 YouTube views result:", currentViews);
+      } else if (platform.toLowerCase() === "facebook") {
+        console.log("📘 Fetching Facebook views for:", videoUrl);
+        const rawViews = await getFacebookViewCount(videoUrl);
+        currentViews = parseInt(rawViews.toString().replace(/[^\d]/g, ""), 10);
+        console.log("📘 Facebook views result:", currentViews);
+      } else {
+        console.error("❌ Unsupported platform:", platform);
+        return res.status(400).json({ message: "Unsupported platform" });
+      }
+    } catch (viewError) {
+      console.error("❌ Error fetching views:", viewError);
+      return res.status(500).json({ message: "Failed to fetch current view count: " + viewError.message });
     }
 
     if (!currentViews || isNaN(currentViews)) {
+      console.error("❌ Invalid view count:", currentViews);
       return res.status(500).json({ message: "Failed to fetch current view count" });
     }
 
@@ -49,29 +79,42 @@ const submitComplitedAds = async (req, res) => {
       });
     }
 
-    // ✅ 4. Mark proof as completed and save screenshot path
+    // ✅ 4. Update proof with completion screenshot but keep status as "submitted" for admin review
+    console.log("💾 Updating proof in database:", {
+      adId,
+      reporterId,
+      screenshotPath
+    });
+    
     const updatedDoc = await reporterAdProof.findOneAndUpdate(
       {
         adId,
         "proofs.reporterId": reporterId,
-        "proofs.status": { $in: ["submitted", "rejected"] },
+        "proofs.status": { $in: ["pending", "rejected"] },
       },
       {
         $set: {
-          "proofs.$.status": "completed",
           "proofs.$.completedTaskScreenshot": screenshotPath,
+          "proofs.$.completionSubmittedAt": new Date(),
+          "proofs.$.status": "submitted", // ✅ Set status to "submitted" for admin review
         }
       },
       { new: true }
     );
 
+    console.log("💾 Database update result:", updatedDoc ? "Success" : "Failed");
+    console.log("📊 Updated proof data:", updatedDoc?.proofs?.[0]);
+
     if (!updatedDoc) {
+      console.error("❌ Proof not found or already completed");
       return res.status(404).json({ message: "Proof not found or already completed" });
     }
 
     res.status(200).json({
       success: true,
-      message: "Task marked as completed",
+      message: updatedDoc?.proofs?.[0]?.status === "rejected" 
+        ? "Completion screenshot resubmitted successfully. Admin will review and approve to mark as completed."
+        : "Completion screenshot submitted successfully. Admin will review and approve to mark as completed.",
       data: updatedDoc,
     });
 

@@ -9,7 +9,7 @@ const getAcceptedAds = async (req, res) => {
         $elemMatch: {
           reporterId: reporterId,
           postStatus: "accepted", // ✅ Use new postStatus field
-          adProof: false // ✅ Only show if adProof is still false
+          adProof: false // ✅ Only show if adProof is still false (no initial proof submitted yet)
         }
       }
     });

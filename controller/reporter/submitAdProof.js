@@ -103,7 +103,7 @@ const submitAdProof = async (req, res) => {
       platform,
       videoLink,
       duration,
-      status: "submitted", // ✅ Use new status
+        status: "pending", // ✅ Initial proof submitted, waiting for completion screenshot
       userRole: req.user.role === "influencer" ? "Influencer" : "Reporter",
     };
 
@@ -126,7 +126,15 @@ const submitAdProof = async (req, res) => {
       
       if (existingProofIndex !== -1) {
         // Update existing proof (for resubmission after rejection)
-        adProofDoc.proofs[existingProofIndex] = newProof;
+        // Clear rejection fields when resubmitting
+        const updatedProof = {
+          ...newProof,
+          adminRejectNote: "",
+          adminRejectedBy: null,
+          adminRejectedByName: "",
+          adminRejectedAt: null
+        };
+        adProofDoc.proofs[existingProofIndex] = updatedProof;
       } else {
         // Add new proof
         adProofDoc.proofs.push(newProof);
@@ -143,6 +151,12 @@ const submitAdProof = async (req, res) => {
           "acceptRejectReporterList.$.adProof": true,
           "acceptRejectReporterList.$.postStatus": "submitted",
           "acceptRejectReporterList.$.submittedAt": new Date(),
+        },
+        $unset: {
+          "acceptRejectReporterList.$.rejectedAt": 1,
+          "acceptRejectReporterList.$.rejectNote": 1,
+          "acceptRejectReporterList.$.adminRejectedBy": 1,
+          "acceptRejectReporterList.$.adminRejectedByName": 1,
         },
       },
       { session }
@@ -168,21 +182,21 @@ const reporterGetRunningAds = async (req, res) => {
 
     console.log("Reporter ID:", reporterId);
 
-    // 1. Find all adProof documents where this reporter has a proof with status 'submitted' or 'rejected'
+    // 1. Find all adProof documents where this reporter has a proof with status 'pending', 'submitted', or 'rejected'
     const runningAds = await reporterAdProof.find({
       proofs: {
         $elemMatch: {
           reporterId: reporterId,
-          status: { $in: ["submitted", "rejected"] },
+          status: { $in: ["pending", "submitted", "rejected"] },
         },
       },
     });
 
-    // 2. Filter proofs to include only the current reporter's entry (submitted or rejected)
+    // 2. Filter proofs to include only the current reporter's entry (pending, submitted, or rejected)
     const filteredAds = runningAds.map((doc) => {
       const reporterProof = doc.proofs.find(
         (proof) => proof.reporterId.toString() === reporterId.toString() && 
-                  (proof.status === "submitted" || proof.status === "rejected")
+                  (proof.status === "pending" || proof.status === "submitted" || proof.status === "rejected")
       );
 
       return {
@@ -201,7 +215,7 @@ const reporterGetRunningAds = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Running ads fetched successfully",
+      message: "Running ads fetched successfully (includes pending, submitted, and rejected proofs)",
       data: filteredAds,
     });
   } catch (error) {
@@ -266,3 +280,6 @@ module.exports = {
   reporterGetRunningAds,
   reporterGetCompletedAds,
 };
+
+
+

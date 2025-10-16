@@ -434,19 +434,17 @@ const adminModifyAds = async (req, res) => {
       originalCity: ad.adCity
     });
     
-    // ✅ Reset all reporter statuses to "pending" when advertisement is modified
+    // ✅ PRESERVE ALL EXISTING USER STATUSES - NO RESETTING
+    // When modifying an advertisement, we only update targeting and add new users
+    // Existing users keep their current status (pending, accepted, submitted, completed, etc.)
     if (ad.acceptRejectReporterList && ad.acceptRejectReporterList.length > 0) {
-      console.log(`🔄 Resetting ${ad.acceptRejectReporterList.length} reporter statuses to "pending" for modified ad`);
-      ad.acceptRejectReporterList.forEach(reporter => {
-        reporter.postStatus = "pending";
-        reporter.accepted = false;
-        reporter.adProof = false;
-        reporter.rejectNote = "";
-        reporter.rejectedAt = null;
-        reporter.acceptedAt = null;
-        reporter.submittedAt = null;
-        reporter.completedAt = null;
-      });
+      console.log(`✅ Preserving all ${ad.acceptRejectReporterList.length} existing user statuses during modification`);
+      console.log(`📊 Current user statuses:`, ad.acceptRejectReporterList.map(r => ({
+        reporterId: r.reporterId,
+        postStatus: r.postStatus,
+        accepted: r.accepted,
+        adProof: r.adProof
+      })));
     }
     
     // Note: updatedAt will be automatically set by mongoose timestamps

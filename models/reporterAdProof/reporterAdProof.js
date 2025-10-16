@@ -40,12 +40,33 @@ const proofSchema = new mongoose.Schema({
   },
   status: { 
     type: String,
-    enum: ['submitted', 'approved', 'rejected', 'completed'],
+    enum: ['pending', 'submitted', 'approved', 'rejected', 'completed'],
     default: 'submitted'
   },
   adminRejectNote: {
     type: String,
     default: ""
+  },
+  adminRejectedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Admin",
+    default: null
+  },
+  adminRejectedByName: {
+    type: String,
+    default: ""
+  },
+  adminApprovedAt: {
+    type: Date,
+    default: null
+  },
+  adminRejectedAt: {
+    type: Date,
+    default: null
+  },
+  completionSubmittedAt: {
+    type: Date,
+    default: null
   },
   userRole: {
     type: String,

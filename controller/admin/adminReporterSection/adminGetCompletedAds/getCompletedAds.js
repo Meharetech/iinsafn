@@ -50,12 +50,17 @@ const adminApproveAdsProof = async (req, res) => {
   try {
     const { adId, reporterId } = req.body;
 
-    // 1. Update the proof status
+    // 1. Update the proof status from "submitted" to "completed" (only if admin approves)
     const updated = await reporterAdProof.findOneAndUpdate(
-      { adId, "proofs.reporterId": reporterId },
+      {
+        adId,
+        "proofs.reporterId": reporterId,
+        "proofs.status": "submitted" // ✅ Only process submitted proofs (final proof submitted)
+      },
       {
         $set: {
           "proofs.$[elem].status": "completed",
+          "proofs.$[elem].adminApprovedAt": new Date(),
         },
       },
       {
@@ -69,7 +74,7 @@ const adminApproveAdsProof = async (req, res) => {
       await session.abortTransaction();
       return res
         .status(404)
-        .json({ message: "Proof not found for this ad and reporter" });
+        .json({ message: "Proof not found or not in submitted status for admin approval" });
     }
 
     // 2. Count how many proofs are fully completed
@@ -216,17 +221,27 @@ async function adminRejectAdsProof(req, res) {
   session.startTransaction();
   
   try {
-    const { adId, reporterId, rejectNote } = req.body;
+    const { adId, reporterId, adminNote } = req.body;
+    const adminId = req.user._id;
+    const adminName = req.user.name || req.user.email || "Admin";
 
     const updated = await reporterAdProof.findOneAndUpdate(
       {
         adId,
         "proofs.reporterId": reporterId,
+        "proofs.status": "submitted", // ✅ Only reject submitted proofs (final proof submitted)
       },
       {
         $set: {
           "proofs.$[elem].status": "rejected",
-          "proofs.$[elem].adminRejectNote": rejectNote || "",
+          "proofs.$[elem].adminRejectNote": adminNote || "",
+          "proofs.$[elem].adminRejectedAt": new Date(),
+          "proofs.$[elem].adminRejectedBy": adminId,
+          "proofs.$[elem].adminRejectedByName": adminName,
+        },
+        $unset: {
+          "proofs.$[elem].completedTaskScreenshot": 1, // ✅ Remove completion screenshot
+          "proofs.$[elem].completionSubmittedAt": 1,   // ✅ Remove completion timestamp
         },
       },
       {
@@ -238,16 +253,23 @@ async function adminRejectAdsProof(req, res) {
 
     if (!updated) {
       await session.abortTransaction();
-      return res.status(404).json({ message: "Ad or proof not found" });
+      return res.status(404).json({ message: "Proof not found or not in submitted status for rejection" });
     }
 
-    // Update reporter's status in the ad
+    // Update reporter's status in the ad - keep initial proof, only reject completion screenshot
     await Adpost.updateOne(
       { _id: adId, "acceptRejectReporterList.reporterId": reporterId },
       {
         $set: {
-          "acceptRejectReporterList.$.postStatus": "submitted", // Reset to submitted for resubmission
-          "acceptRejectReporterList.$.adProof": false, // Reset adProof
+          "acceptRejectReporterList.$.postStatus": "pending", // Reset to pending (initial proof is still valid)
+          "acceptRejectReporterList.$.adProof": true, // Keep adProof as true (initial proof exists)
+          "acceptRejectReporterList.$.rejectedAt": new Date(),
+          "acceptRejectReporterList.$.rejectNote": adminNote || "Completion screenshot rejected by admin",
+          "acceptRejectReporterList.$.adminRejectedBy": adminId,
+          "acceptRejectReporterList.$.adminRejectedByName": adminName,
+        },
+        $unset: {
+          "acceptRejectReporterList.$.completedAt": 1, // Remove completion timestamp
         },
       },
       { session }
@@ -260,12 +282,12 @@ async function adminRejectAdsProof(req, res) {
     if (reporter) {
       await sendEmail(
         reporter.email,
-        "Your Proof Has Been Rejected ❌",
+        "Your Completion Screenshot Has Been Rejected ❌",
         `Hello ${
           reporter.name
-        },\n\nYour proof for Ad ID: ${adId} has been rejected by the Admin.\nReason: ${
-          rejectNote || "No reason provided"
-        }.\n\nPlease resubmit the proof.\n\nRegards,\nTeam`
+        },\n\nYour completion screenshot for Ad ID: ${adId} has been rejected by Admin: ${adminName}.\nReason: ${
+          adminNote || "No reason provided"
+        }.\n\nYour initial proof is still valid. Please resubmit the completion screenshot.\n\nRegards,\nTeam`
       );
 
       // 📱 WhatsApp notification
@@ -276,7 +298,8 @@ async function adminRejectAdsProof(req, res) {
           [
             reporter.name,
             adId,
-            rejectNote || "No reason provided",
+            adminNote || "No reason provided",
+            adminName,
           ]
         );
       }

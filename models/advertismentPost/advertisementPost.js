@@ -164,6 +164,18 @@ const advertisementSchema = new mongoose.Schema(
           type: String,
           default: "",
         },
+        adminRejectedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Admin",
+          default: null
+        },
+        adminRejectedByName: {
+          type: String,
+          default: ""
+        },
+        rejectedAt: {
+          type: Date,
+        },
         acceptedAt: {
           type: Date,
         },
