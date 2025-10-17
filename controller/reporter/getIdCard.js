@@ -29,7 +29,7 @@ const getIdCard = async (req, res) => {
     } else if (status === "Under Review") {
       return res.status(200).json({
         success: false,
-        message: "Your ID card is still under review. Please wait for admin approval.",
+        message: "Your ID card is still under review 24 hours . Please wait for admin approval.",
       });
     } else if (status === "Rejected") {
       return res.status(200).json({

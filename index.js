@@ -40,6 +40,7 @@ try{
     connectDB()
     app.use('/upload', express.static(path.join(__dirname,'upload')))
     app.use('/uploads', express.static(path.join(__dirname,'uploads')))
+    app.use('/images', express.static(path.join(__dirname,'images')))
 
     // Apply multer error handler middleware
     app.use(multerErrorHandler)

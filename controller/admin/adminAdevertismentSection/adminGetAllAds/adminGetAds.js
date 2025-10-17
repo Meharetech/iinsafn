@@ -209,14 +209,23 @@ const approvedAds = async (req, res) => {
         }).select("_id").session(session);
         console.log(`🏙️ Found ${targetReporters.length} reporters in admin selected cities`);
       } else {
-        // Default location-based targeting
-        targetReporters = await User.find({
-          role: "Reporter",
-          verifiedReporter: true,
-          state: ad.adState,
-          city: ad.adCity
-        }).select("_id").session(session);
-        console.log(`📍 Found ${targetReporters.length} reporters in default location: ${ad.adState}, ${ad.adCity}`);
+        // Default location-based targeting - only if adState and adCity are provided
+        if (ad.adState && ad.adCity) {
+          targetReporters = await User.find({
+            role: "Reporter",
+            verifiedReporter: true,
+            state: ad.adState,
+            city: ad.adCity
+          }).select("_id").session(session);
+          console.log(`📍 Found ${targetReporters.length} reporters in default location: ${ad.adState}, ${ad.adCity}`);
+        } else {
+          // If no location targeting is specified, target all verified reporters
+          targetReporters = await User.find({
+            role: "Reporter",
+            verifiedReporter: true
+          }).select("_id").session(session);
+          console.log(`📍 No location targeting specified, found ${targetReporters.length} all verified reporters`);
+        }
       }
       
       // Save the actually targeted user IDs

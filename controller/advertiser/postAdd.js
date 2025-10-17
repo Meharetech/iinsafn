@@ -193,8 +193,6 @@ const postAdd = async (req, res) => {
     const requiredFields = [
       "adType",
       "requiredViews",
-      "adState",
-      "adCity",
       "mediaType",
       "adLength",
       "startDate",

@@ -26,10 +26,17 @@ const createIdCard = async (req, res) => {
     // Step 2: Check if reporter already generated ID card
     const existingIdCard = await genrateIdCard.findOne({ reporter: id });
     if (existingIdCard) {
-      return res.status(400).json({
-        message:
-          "You have already generated your ID card. Only one is allowed.",
-      });
+      // Allow resubmission only if the previous application was rejected
+      if (existingIdCard.status === "Rejected") {
+        // Delete the rejected application to allow new submission
+        await genrateIdCard.findByIdAndDelete(existingIdCard._id);
+        console.log("Deleted rejected ID card application for resubmission");
+      } else {
+        return res.status(400).json({
+          message:
+            "You have already generated your ID card. Only one is allowed.",
+        });
+      }
     }
 
     // Step 3: Validate required fields

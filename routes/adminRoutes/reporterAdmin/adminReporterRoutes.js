@@ -28,6 +28,8 @@ const {
 
 const getAdvertisementCompletionDetails = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/getAdvertisementCompletionDetails");
 const markAdvertisementCompleted = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/markAdvertisementCompleted");
+const updateControls = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/updateControls");
+const getAdvertisementDetails = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/getAdvertisementDetails");
 
 const adminAuthenticate = require("../../../middlewares/adminAuthenticate/adminAuthenticate");
 const verifyAdminAccess = require("../../../middlewares/adminAuthenticate/verifyAdminAccess");
@@ -314,6 +316,20 @@ router.get("/admin/get/paid-conference/:conferenceId/targeted-reporters",
   adminAuthenticate,
   verifyAdminAccess("reporter"),
   getPaidConferenceTargetedReporters
+)
+
+// Update controls (base view and commission) for advertisements
+router.put("/admin/update/controls/:adId",
+  adminAuthenticate,
+  verifyAdminAccess("reporter"),
+  updateControls
+)
+
+// Get advertisement details
+router.get("/admin/get/advertisement-details/:adId",
+  adminAuthenticate,
+  verifyAdminAccess("reporter"),
+  getAdvertisementDetails
 )
 
 module.exports = router;

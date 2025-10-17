@@ -77,14 +77,12 @@ const notifyMatchingReporters = async (ad) => {
       console.log(`✅ Matched by specific user IDs: ${matchedUsers.length} users`);
       console.log(`📊 Matched users:`, matchedUsers.map(u => ({ name: u.name, role: u.role, id: u._id })));
 
-    // 🔹 2nd Preference: State/City targeting (works for both free ads and other ad types)
+    // 🔹 2nd Preference: Admin State/City targeting (works for both free ads and other ad types)
     } else if (
       (Array.isArray(ad.adminSelectState) && ad.adminSelectState.length > 0) ||
-      (Array.isArray(ad.adminSelectCities) && ad.adminSelectCities.length > 0) ||
-      (Array.isArray(ad.state) && ad.state.length > 0) ||
-      (Array.isArray(ad.city) && ad.city.length > 0)
+      (Array.isArray(ad.adminSelectCities) && ad.adminSelectCities.length > 0)
     ) {
-      console.log(`🔍 Using state/city targeting fallback`);
+      console.log(`🔍 Using admin state/city targeting`);
       console.log(`📊 Available users for matching: ${users.length}`);
       console.log(`📊 Users by role:`, {
         reporters: users.filter(u => u.role === 'Reporter').length,
@@ -92,9 +90,9 @@ const notifyMatchingReporters = async (ad) => {
       });
       
       matchedUsers = users.filter(u => {
-        // Get state and city arrays from different possible field names
-        const states = ad.adminSelectState || ad.state || [];
-        const cities = ad.adminSelectCities || ad.city || [];
+        // Get state and city arrays from admin targeting
+        const states = ad.adminSelectState || [];
+        const cities = ad.adminSelectCities || [];
         
         console.log(`🔍 Checking user ${u.name} (${u.role}): state=${u.state}, city=${u.city}`);
         console.log(`🔍 Target states: ${JSON.stringify(states)}, Target cities: ${JSON.stringify(cities)}`);
@@ -121,9 +119,9 @@ const notifyMatchingReporters = async (ad) => {
         }
         return false;
       });
-      console.log(`✅ Matched by state/city targeting: ${matchedUsers.length} users`);
-      console.log("Selected states:", ad.adminSelectState || ad.state);
-      console.log("Selected cities:", ad.adminSelectCities || ad.city);
+      console.log(`✅ Matched by admin state/city targeting: ${matchedUsers.length} users`);
+      console.log("Selected states:", ad.adminSelectState);
+      console.log("Selected cities:", ad.adminSelectCities);
       console.log("Matched users details:", matchedUsers.map(u => ({ name: u.name, role: u.role, state: u.state, city: u.city })));
 
     // 🔹 3rd Preference: allStates/allState (works for both free ads and other ad types)
@@ -131,15 +129,51 @@ const notifyMatchingReporters = async (ad) => {
       matchedUsers = users;
       console.log("Matched by allStates/allState:", matchedUsers.length);
 
-    // 🔹 4th Preference: pfState / pfCities / adState / adCity
+    // 🔹 4th Preference: pfState / pfCities (preference targeting)
+    } else if (ad.pfState || (Array.isArray(ad.pfCities) && ad.pfCities.length > 0)) {
+      console.log(`🔍 Using preference state/city targeting`);
+      console.log(`📊 Available users for matching: ${users.length}`);
+      
+      matchedUsers = users.filter(u => {
+        let stateMatch = false;
+        let cityMatch = false;
+        
+        // Check state match
+        if (ad.pfState) {
+          stateMatch = u.state === ad.pfState;
+          console.log(`User ${u.name} (${u.state}): State match with ${ad.pfState}: ${stateMatch}`);
+        }
+        
+        // Check city match
+        if (Array.isArray(ad.pfCities) && ad.pfCities.length > 0) {
+          cityMatch = ad.pfCities.includes(u.city);
+          console.log(`User ${u.name} (${u.city}): City match with ${JSON.stringify(ad.pfCities)}: ${cityMatch}`);
+        }
+        
+        // If both state and cities are specified, user must match BOTH
+        if (ad.pfState && Array.isArray(ad.pfCities) && ad.pfCities.length > 0) {
+          return stateMatch && cityMatch;
+        }
+        // If only state is specified, match by state
+        else if (ad.pfState) {
+          return stateMatch;
+        }
+        // If only cities are specified, match by city
+        else if (Array.isArray(ad.pfCities) && ad.pfCities.length > 0) {
+          return cityMatch;
+        }
+        
+        return false;
+      });
+      console.log(`✅ Matched by preference targeting: ${matchedUsers.length} users`);
+      console.log("Preference state:", ad.pfState);
+      console.log("Preference cities:", ad.pfCities);
+      console.log("Matched users details:", matchedUsers.map(u => ({ name: u.name, role: u.role, state: u.state, city: u.city })));
+
+    // 🔹 5th Preference: No targeting - show to all users
     } else {
-      matchedUsers = users.filter(u =>
-        (ad.pfState && u.state === ad.pfState) ||
-        (Array.isArray(ad.pfCities) && ad.pfCities.includes(u.city)) ||
-        (ad.adState && u.state === ad.adState) ||
-        (ad.adCity && u.city === ad.adCity)
-      );
-      console.log("Matched by pfState/pfCities/adState/adCity:", matchedUsers.length);
+      matchedUsers = users;
+      console.log("No specific targeting found, showing to all users:", matchedUsers.length);
     }
 
     // 🚫 Stop if no users matched

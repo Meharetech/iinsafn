@@ -245,10 +245,33 @@ const rejectIdCard = async (req, res) => {
 
 const getApprovedCards = async (req, res) => {
   try {
-    const reportersIdCard = await genrateIdCard.find({ status: "Approved" });
-    res.status(200).json({ success: true, reportersIdCard });
+    const { page = 1, limit = 50 } = req.query;
+    const skip = (page - 1) * limit;
+    
+    // Get approved cards sorted by latest first (most recent updatedAt/createdAt)
+    const reportersIdCard = await genrateIdCard
+      .find({ status: "Approved" })
+      .sort({ updatedAt: -1, createdAt: -1 }) // Sort by latest first
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate('reporter', 'iinsafId name email mobile role');
+    
+    // Get total count for pagination
+    const totalCount = await genrateIdCard.countDocuments({ status: "Approved" });
+    
+    res.status(200).json({ 
+      success: true, 
+      reportersIdCard,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalCount / limit),
+        totalCount,
+        hasNext: skip + parseInt(limit) < totalCount,
+        hasPrev: page > 1
+      }
+    });
   } catch (error) {
-    console.error("Error fetching reporters:", error);
+    console.error("Error fetching approved ID cards:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };

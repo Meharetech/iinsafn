@@ -32,14 +32,15 @@ const advertisementSchema = new mongoose.Schema(
     },
     adState: {
       type: String,
-      required: true,
+      required: false,
     },
     adCity: {
       type: String,
-      required: true,
+      required: false,
     },
     pincode: {
       type: Number,
+      required: false,
     },
     couponCode: {
       type: String,
