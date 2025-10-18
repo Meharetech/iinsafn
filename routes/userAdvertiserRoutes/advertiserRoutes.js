@@ -14,6 +14,7 @@ const checkCoupon = require("../../controller/advertiser/checkCoupon");
 const getRunningAds  = require("../../controller/advertiser/getRunningAds");
 const advertiserWalletDetail = require('../../controller/wallets/advertiserWalletDetail')
 const advertiserGetCompletedAds = require("../../controller/advertiser/advertiserGetCompletedAds")
+const checkVideoViews = require("../../controller/advertiser/checkVideoViews")
 
 
 
@@ -30,6 +31,7 @@ router.post("/apply/coupon",userAuthenticate,checkCoupon)
 router.get('/get/running/ads',userAuthenticate,getRunningAds)
 router.get('/get/wallet/detail',userAuthenticate,advertiserWalletDetail)
 router.get('/advertiser/get/completed/ads',userAuthenticate,advertiserGetCompletedAds)
+router.get('/advertiser/check/video-views/:adId',userAuthenticate,checkVideoViews)
 router.get("/ads/accepted/by/reporters/for/advertiser", userAuthenticate, getAdvertiserAcceptedReporters);
 
 
