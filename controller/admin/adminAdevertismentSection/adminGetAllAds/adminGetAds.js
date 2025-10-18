@@ -209,15 +209,15 @@ const approvedAds = async (req, res) => {
         }).select("_id").session(session);
         console.log(`🏙️ Found ${targetReporters.length} reporters in admin selected cities`);
       } else {
-        // Default location-based targeting - only if adState and adCity are provided
-        if (ad.adState && ad.adCity) {
+        // Default location-based targeting - only if pfState and pfCities are provided
+        if (ad.pfState && ad.pfCities && ad.pfCities.length > 0) {
           targetReporters = await User.find({
             role: "Reporter",
             verifiedReporter: true,
-            state: ad.adState,
-            city: ad.adCity
+            state: ad.pfState,
+            city: { $in: ad.pfCities }
           }).select("_id").session(session);
-          console.log(`📍 Found ${targetReporters.length} reporters in default location: ${ad.adState}, ${ad.adCity}`);
+          console.log(`📍 Found ${targetReporters.length} reporters in preference location: ${ad.pfState}, ${ad.pfCities.join(', ')}`);
         } else {
           // If no location targeting is specified, target all verified reporters
           targetReporters = await User.find({
@@ -439,8 +439,8 @@ const adminModifyAds = async (req, res) => {
       adminSelectState: ad.adminSelectState,
       adminSelectCities: ad.adminSelectCities,
       reporterId: ad.reporterId,
-      originalState: ad.adState,
-      originalCity: ad.adCity
+      preferenceState: ad.pfState,
+      preferenceCities: ad.pfCities
     });
     
     // ✅ PRESERVE ALL EXISTING USER STATUSES - NO RESETTING
@@ -723,8 +723,8 @@ const getAdvertisementTargetedReporters = async (req, res) => {
       adminSelectState: advertisement.adminSelectState,
       adminSelectCities: advertisement.adminSelectCities,
       reporterId: advertisement.reporterId,
-      originalState: advertisement.adState,
-      originalCity: advertisement.adCity,
+      preferenceState: advertisement.pfState,
+      preferenceCities: advertisement.pfCities,
       userType: advertisement.userType
     });
     console.log(`🔍 Advertisement reporterId array:`, advertisement.reporterId);
@@ -901,8 +901,8 @@ const getAdvertisementTargetedReporters = async (req, res) => {
           adminSelectPincode: advertisement.adminSelectPincode,
           reporterId: advertisement.reporterId,
           userType: advertisement.userType,
-          originalState: advertisement.adState,
-          originalCity: advertisement.adCity,
+          preferenceState: advertisement.pfState,
+          preferenceCities: advertisement.pfCities,
           modifiedAt: advertisement.updatedAt
         }
       }
