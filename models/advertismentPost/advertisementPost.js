@@ -63,7 +63,7 @@ const advertisementSchema = new mongoose.Schema(
     },
     endDate: {
       type: String,
-      required: true,
+      required: false, // Made optional - end date is no longer required
     },
     subtotal: {
       type: String,

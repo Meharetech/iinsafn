@@ -196,7 +196,7 @@ const postAdd = async (req, res) => {
       "mediaType",
       "adLength",
       "startDate",
-      "endDate",
+      // "endDate", // Made optional - removed from required fields
       "subtotal",
       "gst",
       "totalCost",
@@ -373,7 +373,7 @@ const postAdd = async (req, res) => {
          <p><strong>Ad Type:</strong> ${newAd.adType}</p>
          <p><strong>Required Views:</strong> ${newAd.requiredViews}</p>
          <p><strong>Start Date:</strong> ${newAd.startDate}</p>
-         <p><strong>End Date:</strong> ${newAd.endDate}</p>`
+         <p><strong>End Date:</strong> ${newAd.endDate || 'Not specified'}</p>`
       );
     }
 
