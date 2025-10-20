@@ -52,6 +52,26 @@ const generateUniqueIinsafId = async (role) => {
 
 
 
+// Ensure unique temporary reporter id to avoid duplicate key errors
+const generateUniqueReporterId = async () => {
+  let uniqueId;
+  let attempts = 0;
+  while (true) {
+    // Use 6 digits to give 900,000 possibilities
+    const randomNum = Math.floor(100000 + Math.random() * 900000);
+    uniqueId = `NOTVERIFIEDREPORTER${randomNum}`;
+    const existingUser = await User.findOne({ iinsafId: uniqueId });
+    if (!existingUser) {
+      return uniqueId;
+    }
+    attempts++;
+    if (attempts > 30) {
+      throw new Error("🚨 Too many attempts to generate unique reporter iinsafId");
+    }
+  }
+};
+
+
 
 const sendOtpViaSMS = async (mobile, otp, userName) => {
   try {
@@ -139,7 +159,10 @@ const verifyOtp = async (req, res) => {
   console.log("🔍 OTP Verification Debug - Request body:", req.body);
   
   const { email, mobile, otpEmail, otpMobile } = req.body;
-  const key = `${email}|${mobile}`;
+  // Normalize identifiers to avoid key mismatches due to casing/whitespace
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : email;
+  const normalizedMobile = typeof mobile === 'string' ? mobile.trim() : mobile;
+  const key = `${normalizedEmail}|${normalizedMobile}`;
   
   console.log("🔍 OTP Verification Debug - Key:", key);
   console.log("🔍 OTP Verification Debug - Pending registrations keys:", Array.from(pendingRegistrations.keys()));
@@ -185,8 +208,7 @@ const verifyOtp = async (req, res) => {
     if (userData.role === "Advertiser" || userData.role === "Influencer") {
       iinsafId = await generateUniqueIinsafId(userData.role);
     } else if (userData.role === "Reporter") {
-      const randomDigit = Math.floor(Math.random() * 10);
-      iinsafId = `NOTVERIFIEDREPORTER${randomDigit}`;
+      iinsafId = await generateUniqueReporterId();
     }
 
     const user = new User({
@@ -314,7 +336,10 @@ const preRegisterUser = async (req, res) => {
       otpExpiry,
     };
     
-    const key = `${email}|${mobile}`;
+    // Normalize identifiers for consistent keying
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : email;
+    const normalizedMobile = typeof mobile === 'string' ? mobile.trim() : mobile;
+    const key = `${normalizedEmail}|${normalizedMobile}`;
     pendingRegistrations.set(key, registrationData);
     
     console.log("🔍 Pre-registration Debug - Stored data:");
@@ -349,7 +374,10 @@ const preRegisterUser = async (req, res) => {
 
 const resendOtp = async (req, res) => {
   const { email, mobile } = req.body;
-  const key = `${email}|${mobile}`;
+  // Normalize identifiers for consistent keying
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : email;
+  const normalizedMobile = typeof mobile === 'string' ? mobile.trim() : mobile;
+  const key = `${normalizedEmail}|${normalizedMobile}`;
 
   const userData = pendingRegistrations.get(key);
 
