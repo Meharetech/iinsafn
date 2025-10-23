@@ -67,7 +67,9 @@ const adminSetAdPrice = async (req, res) => {
       baseView,
       perCityPrice,
       adCommission,
-      withdrawAmount
+      withdrawAmount,
+      maxAdLength,
+      minAdLength
     } = req.body;
 
     // Build update object only with provided (non-undefined and non-empty) fields
@@ -87,6 +89,14 @@ const adminSetAdPrice = async (req, res) => {
     // ✅ Only update withdraw amount if valid number
     if (withdrawAmount !== undefined && withdrawAmount !== "" && !isNaN(withdrawAmount)) {
       updateFields.minimumWithdrawAmountForReporter = Number(withdrawAmount);
+    }
+
+    // ✅ Update ad length limits if provided
+    if (maxAdLength !== undefined && maxAdLength !== "" && !isNaN(maxAdLength)) {
+      updateFields.maxAdLength = Number(maxAdLength);
+    }
+    if (minAdLength !== undefined && minAdLength !== "" && !isNaN(minAdLength)) {
+      updateFields.minAdLength = Number(minAdLength);
     }
 
     const pricing = await AdPricing.findOneAndUpdate(

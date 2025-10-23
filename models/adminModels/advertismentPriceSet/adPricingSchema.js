@@ -37,6 +37,14 @@ const adPricingSchema = new mongoose.Schema({
   paidConferenceCommission: {  // ✅ new field for paid conference commission percentage
     type: Number,
     default: 0
+  },
+  maxAdLength: {  // ✅ Maximum ad length in seconds
+    type: Number,
+    default: 600
+  },
+  minAdLength: {  // ✅ Minimum ad length in seconds
+    type: Number,
+    default: 5
   }
 }, { timestamps: true });
 

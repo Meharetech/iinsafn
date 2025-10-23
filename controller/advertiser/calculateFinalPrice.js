@@ -30,9 +30,8 @@ const calculateFinalPrice = async (req, res) => {
     const views = Number(requiredViews);
     const duration = Number(adLength);
 
-    // REASONABLE PRICING: Use a fixed per-view cost instead of adTypePrice as multiplier
-    const perViewCost = 0.5; // ₹0.01 per view (much more reasonable)
-    const viewCost = perViewCost * views;
+    // Use ad type price for view cost calculation
+    const viewCost = perAdTypePrice * views;
     const durationCost = perSecPrice * duration;
     const totalBaseCost = (viewCost + durationCost + citiesCost) * days;
     const gstAmount = (gstRate / 100) * totalBaseCost;
