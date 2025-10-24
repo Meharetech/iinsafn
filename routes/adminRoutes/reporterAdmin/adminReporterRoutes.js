@@ -17,6 +17,7 @@ const {
   rejectIdCard,
   getApprovedCards,
   getRejectCards,
+  deleteReporterIdCard,
 } = require("../../../controller/admin/adminReporterSection/adminGetIdCards/getAllidCards");
 
 const {
@@ -330,6 +331,13 @@ router.get("/admin/get/advertisement-details/:adId",
   adminAuthenticate,
   verifyAdminAccess("reporter"),
   getAdvertisementDetails
+)
+
+// Delete reporter ID card
+router.delete("/admin/delete/reporter-id-card/:id",
+  adminAuthenticate,
+  verifyAdminAccess("reporter"),
+  deleteReporterIdCard
 )
 
 module.exports = router;

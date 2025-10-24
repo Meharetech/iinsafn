@@ -286,10 +286,61 @@ const getRejectCards = async (req, res) => {
   }
 };
 
+// Delete reporter ID card
+const deleteReporterIdCard = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log(`🗑️ Deleting reporter ID card: ${id}`);
+    
+    // Find the ID card first
+    const idCard = await genrateIdCard.findById(id);
+    
+    if (!idCard) {
+      return res.status(404).json({
+        success: false,
+        message: "Reporter ID card not found"
+      });
+    }
+    
+    console.log(`📋 Found ID card for reporter: ${idCard.name} (${idCard.email})`);
+    
+    // Delete the ID card
+    const deleteResult = await genrateIdCard.findByIdAndDelete(id);
+    
+    if (!deleteResult) {
+      return res.status(404).json({
+        success: false,
+        message: "Failed to delete reporter ID card"
+      });
+    }
+    
+    console.log(`✅ Successfully deleted reporter ID card for: ${idCard.name}`);
+    
+    res.status(200).json({
+      success: true,
+      message: "Reporter ID card deleted successfully",
+      data: {
+        deletedId: id,
+        reporterName: idCard.name,
+        reporterEmail: idCard.email
+      }
+    });
+    
+  } catch (error) {
+    console.error("Error deleting reporter ID card:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while deleting reporter ID card"
+    });
+  }
+};
+
 module.exports = {
   getAllidCards,
   approveIdCardStatus,
   rejectIdCard,
   getApprovedCards,
   getRejectCards,
+  deleteReporterIdCard,
 };
