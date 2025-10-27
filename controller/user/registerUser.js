@@ -52,26 +52,6 @@ const generateUniqueIinsafId = async (role) => {
 
 
 
-// Ensure unique temporary reporter id to avoid duplicate key errors
-const generateUniqueReporterId = async () => {
-  let uniqueId;
-  let attempts = 0;
-  while (true) {
-    // Use 6 digits to give 900,000 possibilities
-    const randomNum = Math.floor(100000 + Math.random() * 900000);
-    uniqueId = `NOTVERIFIEDREPORTER${randomNum}`;
-    const existingUser = await User.findOne({ iinsafId: uniqueId });
-    if (!existingUser) {
-      return uniqueId;
-    }
-    attempts++;
-    if (attempts > 30) {
-      throw new Error("🚨 Too many attempts to generate unique reporter iinsafId");
-    }
-  }
-};
-
-
 
 const sendOtpViaSMS = async (mobile, otp, userName) => {
   try {
@@ -205,10 +185,11 @@ const verifyOtp = async (req, res) => {
   try {
     let iinsafId;
 
-    if (userData.role === "Advertiser" || userData.role === "Influencer") {
+    if (userData.role === "Advertiser") {
       iinsafId = await generateUniqueIinsafId(userData.role);
-    } else if (userData.role === "Reporter") {
-      iinsafId = await generateUniqueReporterId();
+    } else if (userData.role === "Influencer" || userData.role === "Reporter") {
+      // Set to null for Influencer and Reporter, they will get ID after verification
+      iinsafId = null;
     }
 
     const user = new User({
