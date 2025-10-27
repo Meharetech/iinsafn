@@ -183,24 +183,25 @@ const verifyOtp = async (req, res) => {
   }
 
   try {
-    let iinsafId;
-
-    if (userData.role === "Advertiser") {
-      iinsafId = await generateUniqueIinsafId(userData.role);
-    } else if (userData.role === "Influencer" || userData.role === "Reporter") {
-      // Set to null for Influencer and Reporter, they will get ID after verification
-      iinsafId = null;
-    }
-
-    const user = new User({
+    let userData_toSave = {
       ...userData,
       isVerified: true,
-      iinsafId,
-    });
+    };
 
+    // Only add iinsafId for Advertiser role
+    if (userData.role === "Advertiser") {
+      const iinsafId = await generateUniqueIinsafId(userData.role);
+      userData_toSave.iinsafId = iinsafId;
+      console.log("✅ Generated iinsafId for Advertiser:", iinsafId);
+    } else if (userData.role === "Influencer" || userData.role === "Reporter") {
+      // Don't include iinsafId field at all - will be assigned after verification
+      console.log(`✅ Creating ${userData.role} without iinsafId - will be assigned after verification`);
+    }
+
+    const user = new User(userData_toSave);
 
     await user.save();
-    console.log("✅ User saved successfully with iinsafId:", iinsafId);
+    console.log("✅ User saved successfully:", userData.role);
 
     // Create wallet for the user
     try {
@@ -222,7 +223,10 @@ const verifyOtp = async (req, res) => {
     return res.status(200).json({
       success: true,
       msg: "OTP verified successfully. You are now registered.",
-      iinsafId,
+      iinsafId: userData_toSave.iinsafId || null,
+      message: userData.role === "Advertiser" 
+        ? "Your Advertiser ID has been generated." 
+        : "Your ID will be assigned after verification.",
     });
   } catch (err) {
     console.error("💥 OTP verification error:", err);
