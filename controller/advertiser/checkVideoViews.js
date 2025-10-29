@@ -7,31 +7,75 @@ const checkVideoViews = async (req, res) => {
   const { adId } = req.params;
 
   try {
-    // Step 1: Verify the advertisement belongs to this advertiser
+    console.log(`📊 Checking video views for ad: ${adId}`);
+
+    // Step 1: Verify the advertisement belongs to this advertiser and is completed
     const advertisement = await Adpost.findOne({ 
       _id: adId, 
-      owner: owner 
+      owner: owner,
+      status: "completed"
     });
 
     if (!advertisement) {
       return res.status(404).json({
         success: false,
-        message: "Advertisement not found or you don't have permission to view it."
+        message: "Advertisement not found, not completed, or you don't have permission to view it."
       });
     }
+
+    console.log(`✅ Advertisement found: ${advertisement._id}`);
 
     // Step 2: Get all proofs for this advertisement
-    const proofs = await reporterAdProof.findOne({
-      adId: adId,
-      runningAdStatus: "completed"
-    });
+    const proofDoc = await reporterAdProof.findOne({
+      adId: adId
+    }).populate('proofs.reporterId', 'name email iinsafId');
 
-    if (!proofs || !proofs.proofs || proofs.proofs.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "No completed proofs found for this advertisement."
+    console.log(`📋 Proof document found:`, proofDoc ? 'Yes' : 'No');
+    console.log(`📋 Number of proofs:`, proofDoc?.proofs?.length || 0);
+
+    // Get only completed and approved proofs
+    const completedProofs = proofDoc && proofDoc.proofs 
+      ? proofDoc.proofs.filter(proof => 
+          proof.status === "completed" && proof.adminApprovedAt
+        )
+      : [];
+
+    console.log(`✅ Completed & approved proofs: ${completedProofs.length}`);
+
+    if (!completedProofs || completedProofs.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No completed and approved proofs found for this advertisement.",
+        data: {
+          advertisement: {
+            adId: advertisement._id,
+            adType: advertisement.adType,
+            mediaType: advertisement.mediaType,
+            mediaDescription: advertisement.mediaDescription,
+            requiredViews: advertisement.requiredViews,
+            createdAt: advertisement.createdAt
+          },
+          performanceMetrics: {
+            requiredViews: advertisement.requiredViews || 0,
+            totalViewsAchieved: 0,
+            viewsDifference: -(advertisement.requiredViews || 0),
+            achievementPercentage: 0,
+            totalProofs: 0,
+            processedProofs: 0,
+            successRate: 0
+          },
+          viewResults: [],
+          summary: {
+            totalVideosChecked: 0,
+            successfulChecks: 0,
+            failedChecks: 0,
+            noLinks: 0
+          }
+        }
       });
     }
+
+    const proofs = { proofs: completedProofs };
 
     // Step 3: Check views for each video link
     const viewResults = [];
@@ -46,13 +90,16 @@ const checkVideoViews = async (req, res) => {
           const views = await getLiveViews(proof.platform, proof.videoLink);
           
           const viewData = {
-            reporterId: proof.reporterId,
-            iinsafId: proof.iinsafId,
+            reporterId: proof.reporterId?._id || proof.reporterId,
+            iinsafId: proof.reporterId?.iinsafId || proof.iinsafId || 'N/A',
+            reporterName: proof.reporterId?.name || 'N/A',
             platform: proof.platform,
             videoLink: proof.videoLink,
             channelName: proof.channelName,
             views: views || 0,
             submittedAt: proof.submittedAt,
+            completionSubmittedAt: proof.completionSubmittedAt,
+            adminApprovedAt: proof.adminApprovedAt,
             status: views ? "success" : "failed"
           };
 
@@ -68,13 +115,16 @@ const checkVideoViews = async (req, res) => {
           console.error(`❌ Error checking views for ${proof.platform}:`, error.message);
           
           viewResults.push({
-            reporterId: proof.reporterId,
-            iinsafId: proof.iinsafId,
+            reporterId: proof.reporterId?._id || proof.reporterId,
+            iinsafId: proof.reporterId?.iinsafId || proof.iinsafId || 'N/A',
+            reporterName: proof.reporterId?.name || 'N/A',
             platform: proof.platform,
             videoLink: proof.videoLink,
             channelName: proof.channelName,
             views: 0,
             submittedAt: proof.submittedAt,
+            completionSubmittedAt: proof.completionSubmittedAt,
+            adminApprovedAt: proof.adminApprovedAt,
             status: "error",
             error: error.message
           });
@@ -82,13 +132,16 @@ const checkVideoViews = async (req, res) => {
       } else {
         // No video link or platform
         viewResults.push({
-          reporterId: proof.reporterId,
-          iinsafId: proof.iinsafId,
+          reporterId: proof.reporterId?._id || proof.reporterId,
+          iinsafId: proof.reporterId?.iinsafId || proof.iinsafId || 'N/A',
+          reporterName: proof.reporterId?.name || 'N/A',
           platform: proof.platform || "N/A",
           videoLink: proof.videoLink || "N/A",
-          channelName: proof.channelName,
+          channelName: proof.channelName || "N/A",
           views: 0,
           submittedAt: proof.submittedAt,
+          completionSubmittedAt: proof.completionSubmittedAt,
+          adminApprovedAt: proof.adminApprovedAt,
           status: "no_link"
         });
       }
@@ -125,10 +178,13 @@ const checkVideoViews = async (req, res) => {
           mediaType: advertisement.mediaType,
           mediaDescription: advertisement.mediaDescription,
           requiredViews: requiredViews,
-          createdAt: advertisement.createdAt
+          createdAt: advertisement.createdAt,
+          completedAt: advertisement.completedAt,
+          status: advertisement.status
         },
         performanceMetrics: performanceMetrics,
         viewResults: viewResults,
+        completionDetails: advertisement.completionDetails || null,
         summary: {
           totalVideosChecked: viewResults.length,
           successfulChecks: viewResults.filter(r => r.status === "success").length,

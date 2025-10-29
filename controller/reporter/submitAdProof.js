@@ -103,7 +103,8 @@ const submitAdProof = async (req, res) => {
       platform,
       videoLink,
       duration,
-      status: "accepted", // ✅ Initial proof accepted, waiting for completion screenshot
+      submittedAt: new Date(), // ✅ Track when initial proof was submitted
+      status: "pending", // ✅ Initial proof submitted - pending admin approval
       userRole: req.user.role === "influencer" ? "Influencer" : "Reporter",
     };
 
@@ -152,7 +153,7 @@ const submitAdProof = async (req, res) => {
       {
         $set: {
           "acceptRejectReporterList.$.adProof": true,
-          "acceptRejectReporterList.$.postStatus": "accepted", // ✅ Set to accepted for initial proof
+          "acceptRejectReporterList.$.postStatus": "pending", // ✅ Set to pending - waiting for admin to approve initial proof
           "acceptRejectReporterList.$.submittedAt": new Date(),
         },
         $unset: {
@@ -208,23 +209,23 @@ const reporterGetRunningAds = async (req, res) => {
       });
     });
 
-    // 1. Find all adProof documents where this reporter has a proof with status 'accepted', 'submitted', or 'rejected'
+    // 1. Find all adProof documents where this reporter has a proof with status 'pending', 'approved', 'submitted', or 'rejected'
     const runningAds = await reporterAdProof.find({
       proofs: {
         $elemMatch: {
           reporterId: reporterId,
-          status: { $in: ["accepted", "submitted", "rejected"] },
+          status: { $in: ["pending", "approved", "submitted", "rejected"] }, // ✅ Include all active statuses
         },
       },
     });
 
     console.log("🔍 Found running ads:", runningAds.length);
 
-    // 2. Filter proofs to include only the current reporter's entry (accepted, submitted, or rejected)
+    // 2. Filter proofs to include only the current reporter's entry (pending, approved, submitted, or rejected)
     const filteredAds = runningAds.map((doc) => {
       const reporterProof = doc.proofs.find(
         (proof) => proof.reporterId.toString() === reporterId.toString() && 
-                  (proof.status === "accepted" || proof.status === "submitted" || proof.status === "rejected")
+                  (proof.status === "pending" || proof.status === "approved" || proof.status === "submitted" || proof.status === "rejected")
       );
 
       return {
@@ -243,7 +244,7 @@ const reporterGetRunningAds = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Running ads fetched successfully (includes accepted, submitted, and rejected proofs)",
+      message: "Running ads fetched successfully (includes pending, approved, submitted, and rejected proofs)",
       data: filteredAds,
     });
   } catch (error) {

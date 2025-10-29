@@ -10,6 +10,7 @@ const markAdvertisementCompleted = async (req, res) => {
 
   try {
     const { adId } = req.params;
+    const { shouldRefund = true } = req.body; // Admin can choose whether to refund or not
     const adminId = req.user.id;
     const adminName = req.user.name;
 
@@ -23,6 +24,7 @@ const markAdvertisementCompleted = async (req, res) => {
 
     console.log("🚀 Marking advertisement as completed:", adId);
     console.log("👤 Admin:", adminName, "ID:", adminId);
+    console.log("💰 Refund choice:", shouldRefund ? "Yes, process refund" : "No, skip refund");
 
     // Find the advertisement
     const advertisement = await Adpost.findById(adId).populate('owner', 'name email organization mobile iinsafId role');
@@ -159,8 +161,9 @@ const markAdvertisementCompleted = async (req, res) => {
         }
     }
 
-    // Process refunds to advertiser wallet if any
-    if (completionResults.totalRefundAmount > 0) {
+    // Process refunds to advertiser wallet if any (only if admin chose to refund)
+    let refundProcessed = false;
+    if (completionResults.totalRefundAmount > 0 && shouldRefund) {
       try {
         console.log(`💰 Processing total refund of ₹${completionResults.totalRefundAmount} to advertiser`);
         
@@ -187,6 +190,7 @@ const markAdvertisementCompleted = async (req, res) => {
         });
 
         await advertiserWallet.save({ session });
+        refundProcessed = true;
         
         console.log(`✅ Successfully refunded ₹${completionResults.totalRefundAmount} to advertiser wallet`);
         console.log(`💰 New wallet balance: ₹${advertiserWallet.balance}`);
@@ -195,6 +199,8 @@ const markAdvertisementCompleted = async (req, res) => {
         console.error(`❌ Error processing refund to advertiser wallet:`, refundError);
         // Don't fail the entire operation if refund fails
       }
+    } else if (completionResults.totalRefundAmount > 0 && !shouldRefund) {
+      console.log(`⚠️ Refund skipped by admin choice (Amount: ₹${completionResults.totalRefundAmount})`);
     }
 
     // Mark advertisement as completed
@@ -211,7 +217,10 @@ const markAdvertisementCompleted = async (req, res) => {
             completedReporters: completionResults.completedReporters,
             rejectedReporters: completionResults.rejectedReporters,
             refundedReporters: completionResults.refundedReporters,
-            totalRefundAmount: completionResults.totalRefundAmount
+            totalRefundAmount: completionResults.totalRefundAmount,
+            refundProcessed: refundProcessed,
+            shouldRefund: shouldRefund,
+            adminRefundDecision: shouldRefund ? "refund_processed" : "refund_skipped"
           }
         }
       },
@@ -226,6 +235,14 @@ const markAdvertisementCompleted = async (req, res) => {
       message: "Advertisement marked as completed successfully",
       data: {
         ...completionResults,
+        refundProcessed: refundProcessed,
+        shouldRefund: shouldRefund,
+        refundSkipped: completionResults.totalRefundAmount > 0 && !shouldRefund ? {
+          amount: completionResults.totalRefundAmount,
+          reason: `Admin chose not to refund for incomplete work`,
+          incompleteReporters: completionResults.refundedReporters,
+          adminDecision: "no_refund"
+        } : null,
         advertisement: {
           adId: advertisement._id,
           status: "completed",
@@ -241,7 +258,9 @@ const markAdvertisementCompleted = async (req, res) => {
       completedReporters: completionResults.completedReporters,
       rejectedReporters: completionResults.rejectedReporters,
       refundedReporters: completionResults.refundedReporters,
-      totalRefundAmount: completionResults.totalRefundAmount
+      totalRefundAmount: completionResults.totalRefundAmount,
+      refundProcessed: refundProcessed,
+      shouldRefund: shouldRefund
     });
 
     res.status(200).json(response);

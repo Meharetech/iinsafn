@@ -110,7 +110,7 @@ const submitComplitedAds = async (req, res) => {
       {
         adId,
         "proofs.reporterId": reporterId,
-        "proofs.status": { $in: ["accepted", "rejected"] },
+        "proofs.status": { $in: ["approved", "rejected"] }, // ✅ Only allow if initial proof is approved or if resubmitting after rejection
       },
       {
         $set: {

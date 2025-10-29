@@ -27,6 +27,11 @@ const {
   getFinalCompletedAds
 } = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/getCompletedAds");
 
+const {
+  adminApproveInitialProof,
+  adminRejectInitialProof
+} = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/initialProofApproveReject");
+
 const getAdvertisementCompletionDetails = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/getAdvertisementCompletionDetails");
 const markAdvertisementCompleted = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/markAdvertisementCompleted");
 const updateControls = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/updateControls");
@@ -140,6 +145,21 @@ router.put(
   adminAuthenticate,
   verifyAdminAccess("reporter"),
   adminRejectAdsProof
+);
+
+// Initial Proof Approve/Reject Routes (for when reporters first submit proof after accepting ad)
+router.put(
+  "/admin/approve/initial/proof",
+  adminAuthenticate,
+  verifyAdminAccess("reporter"),
+  adminApproveInitialProof
+);
+
+router.put(
+  "/admin/reject/initial/proof",
+  adminAuthenticate,
+  verifyAdminAccess("reporter"),
+  adminRejectInitialProof
 );
 
 router.get(

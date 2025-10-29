@@ -2064,6 +2064,7 @@ const debugPaidConferences = async (req, res) => {
 const manuallyCompleteConference = async (req, res) => {
   try {
     const { conferenceId } = req.params;
+    const { shouldRefund = true } = req.body; // Admin can choose whether to refund or not
     const adminId = req.admin._id;
 
     if (!conferenceId) {
@@ -2122,17 +2123,22 @@ const manuallyCompleteConference = async (req, res) => {
         shortfall: shortfall,
         amountPerReporter: amountPerReporter,
         refundAmount: refundAmount,
-        totalPayment: conference.paymentAmount
+        totalPayment: conference.paymentAmount,
+        shouldRefund: shouldRefund,
+        adminChoice: shouldRefund ? "Yes, process refund" : "No, skip refund"
       });
 
-      // Process refund to press user's wallet
-      if (refundAmount > 0) {
+      // Process refund to press user's wallet only if admin chose to refund
+      if (refundAmount > 0 && shouldRefund) {
         refundDetails = await processRefundToPressUser(
           conference.submittedBy, 
           refundAmount, 
           conference.conferenceId,
           `Refund for incomplete conference: ${shortfall} reporter(s) short`
         );
+        console.log(`✅ Refund processed as admin chose to refund`);
+      } else if (refundAmount > 0 && !shouldRefund) {
+        console.log(`⚠️ Refund skipped by admin choice (Amount: ₹${refundAmount})`);
       }
     }
 
@@ -2180,7 +2186,8 @@ const manuallyCompleteConference = async (req, res) => {
         refundedAt: new Date(),
         refundReason: `Incomplete conference: ${actualCompleted}/${requiredReporters} reporters completed`,
         refundTransactionId: refundDetails.transactionId,
-        shortfallReporters: requiredReporters - actualCompleted
+        shortfallReporters: requiredReporters - actualCompleted,
+        refundProcessed: true
       };
       
       console.log(`Refund data to be saved:`, refundData);
@@ -2189,6 +2196,20 @@ const manuallyCompleteConference = async (req, res) => {
       conference.refundDetails = refundData;
       
       console.log(`Conference refundDetails after assignment:`, conference.refundDetails);
+    } else if (refundAmount > 0 && !shouldRefund) {
+      // Store that refund was eligible but admin chose not to refund
+      const refundData = {
+        refundAmount: refundAmount,
+        refundedAt: null,
+        refundReason: `Admin chose not to refund for incomplete conference: ${actualCompleted}/${requiredReporters} reporters completed`,
+        refundTransactionId: null,
+        shortfallReporters: requiredReporters - actualCompleted,
+        refundProcessed: false,
+        adminDecision: "no_refund"
+      };
+      
+      conference.refundDetails = refundData;
+      console.log(`Refund skipped by admin choice - details saved:`, refundData);
     }
 
     await conference.save();
@@ -2216,7 +2237,16 @@ const manuallyCompleteConference = async (req, res) => {
         reason: `Incomplete conference: ${actualCompleted}/${requiredReporters} reporters completed`,
         shortfallReporters: requiredReporters - actualCompleted,
         transactionId: refundDetails.transactionId,
-        newWalletBalance: refundDetails.newBalance
+        newWalletBalance: refundDetails.newBalance,
+        processed: true
+      };
+    } else if (refundAmount > 0 && !shouldRefund) {
+      responseData.refundSkipped = {
+        amount: refundAmount,
+        reason: `Admin chose not to refund for incomplete conference`,
+        shortfallReporters: requiredReporters - actualCompleted,
+        processed: false,
+        adminDecision: "no_refund"
       };
     }
 
@@ -2238,6 +2268,10 @@ const manuallyCompleteConference = async (req, res) => {
       message = `Conference completed with refund processed (₹${refundAmount}) and ${incompleteReporters.length} reporter(s) auto-rejected for incomplete proof.`;
     } else if (refundDetails) {
       message = `Conference completed with refund processed. ₹${refundAmount} refunded to press user wallet.`;
+    } else if (!shouldRefund && refundAmount > 0 && incompleteReporters.length > 0) {
+      message = `Conference completed without refund (admin choice). Potential refund ₹${refundAmount} was not processed. ${incompleteReporters.length} reporter(s) auto-rejected for incomplete proof.`;
+    } else if (!shouldRefund && refundAmount > 0) {
+      message = `Conference completed without refund (admin choice). Potential refund of ₹${refundAmount} was not processed.`;
     } else if (incompleteReporters.length > 0) {
       message = `Conference completed. ${incompleteReporters.length} reporter(s) auto-rejected for incomplete proof.`;
     }

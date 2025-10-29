@@ -14,10 +14,27 @@ const getAcceptedAds = async (req, res) => {
       }
     });
 
+    // ✅ Enhanced response with rejection information for initial proofs
+    const enhancedAds = matchedAds.map(ad => {
+      const reporterEntry = ad.acceptRejectReporterList.find(r => r.reporterId.toString() === reporterId.toString());
+      return {
+        ...ad.toObject(),
+        reporterEntry: {
+          postStatus: reporterEntry?.postStatus,
+          acceptedAt: reporterEntry?.acceptedAt,
+          adProof: reporterEntry?.adProof,
+          initialProofRejected: reporterEntry?.initialProofRejected || false,
+          initialProofRejectNote: reporterEntry?.initialProofRejectNote,
+          initialProofRejectedAt: reporterEntry?.initialProofRejectedAt,
+          initialProofRejectedByName: reporterEntry?.initialProofRejectedByName,
+        }
+      };
+    });
+
     res.status(200).json({
       success: true,
       message: "Ads fetched where reporter has accepted and not yet submitted proof",
-      data: matchedAds
+      data: enhancedAds
     });
 
   } catch (error) {

@@ -652,18 +652,43 @@ const rejectedAds = async (req, res) => {
 
 const adminGetRunningAds = async (req, res) => {
   try {
+    console.log("📊 Fetching admin running ads with ALL proof statuses");
+    
     const runningAds = await reporterAdProof
       .find({ runningAdStatus: "running" })
+      .populate({
+        path: 'adId',
+        populate: {
+          path: 'owner',
+          select: 'name email organization mobile iinsafId role'
+        }
+      })
       .lean(); // keep all proofs and ad details
 
     if (!runningAds || runningAds.length === 0) {
       return res.status(404).json({ message: "No running ads found" });
     }
 
+    console.log(`✅ Found ${runningAds.length} running ads`);
+    
+    // Log proof statuses for debugging
+    runningAds.forEach((ad, index) => {
+      console.log(`📋 Ad ${index + 1} (${ad.adId?._id || ad.adId}):`, {
+        totalProofs: ad.proofs?.length || 0,
+        proofStatuses: ad.proofs?.map(p => ({
+          reporterId: p.reporterId,
+          iinsafId: p.iinsafId,
+          status: p.status,
+          hasScreenshot: !!p.screenshot,
+          hasCompletedScreenshot: !!p.completedTaskScreenshot
+        }))
+      });
+    });
+
     res.status(200).json({
       message: "Running ads fetched successfully",
       count: runningAds.length,
-      data: runningAds, // full ad + proof details, but no liveViews yet
+      data: runningAds, // full ad + proof details with ALL statuses
     });
   } catch (error) {
     console.error("Error fetching running ads:", error);

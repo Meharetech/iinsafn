@@ -108,8 +108,12 @@ const getRunningAds = async (req, res) => {
   try {
     const advertiserId = req.user._id;
 
+    console.log(`📊 Fetching running ads for advertiser: ${advertiserId}`);
+
     // 1. Find all running proofs
     const runningProofs = await reporterAdProof.find({ runningAdStatus: "running" });
+
+    console.log(`📋 Found ${runningProofs.length} running proof documents`);
 
     if (!runningProofs.length) {
       return res.status(404).json({ success: false, message: "No running ad proofs found" });
@@ -122,18 +126,31 @@ const getRunningAds = async (req, res) => {
       owner: advertiserId,
     });
 
+    console.log(`📊 Found ${ads.length} running ads for advertiser`);
+
     if (!ads.length) {
       return res.status(404).json({ success: false, message: "No ads found for current advertiser" });
     }
 
-    // 3. Build response data
+    // 3. Build response data with complete ad details
     const data = ads.map((ad) => {
       const proofs = runningProofs.filter((p) => p.adId.toString() === ad._id.toString());
       if (!proofs.length) return null;
 
       const allProofs = proofs.flatMap((p) => p?.proofs ?? []);
 
-      const simplifiedProofs = allProofs.map((proof) => ({
+      // ✅ FILTER: Only show proofs where initial proof is APPROVED (status: "approved" or "submitted" or "completed")
+      // Don't show "pending" or "rejected" proofs to advertisers
+      const approvedProofs = allProofs.filter((proof) => 
+        proof.status === "approved" || 
+        proof.status === "submitted" || 
+        proof.status === "completed"
+      );
+
+      console.log(`📋 Ad ${ad._id}: Total proofs: ${allProofs.length}, Approved proofs: ${approvedProofs.length}`);
+      console.log(`📋 Proof statuses:`, allProofs.map(p => ({ iinsafId: p.iinsafId, status: p.status })));
+
+      const simplifiedProofs = approvedProofs.map((proof) => ({
         reporterId: proof.reporterId,
         screenshot: proof.screenshot,
         channelName: proof.channelName,
@@ -141,15 +158,53 @@ const getRunningAds = async (req, res) => {
         videoLink: proof.videoLink,
         duration: proof.duration,
         submittedAt: proof.submittedAt,
-        // 🔥 No more view fetching
+        completionSubmittedAt: proof.completionSubmittedAt,
+        iinsafId: proof.iinsafId,
+        status: proof.status
       }));
+
+      // ✅ Only return ad if it has at least one approved proof
+      // This prevents advertisers from seeing ads with only pending/rejected proofs
+      if (simplifiedProofs.length === 0) {
+        console.log(`⚠️ Skipping ad ${ad._id} - no approved proofs`);
+        return null;
+      }
 
       return {
         adId: ad._id,
         adTitle: ad.mediaDescription,
+        // Include all advertisement details
+        adType: ad.adType,
+        mediaType: ad.mediaType,
+        mediaDescription: ad.mediaDescription,
+        userType: ad.userType,
+        requiredViews: ad.requiredViews,
+        adLength: ad.adLength,
+        totalCost: ad.totalCost,
+        subtotal: ad.subtotal,
+        gst: ad.gst,
+        finalReporterPrice: ad.finalReporterPrice,
+        startDate: ad.startDate,
+        endDate: ad.endDate,
+        pfState: ad.pfState,
+        pfCities: ad.pfCities,
+        createdAt: ad.createdAt,
+        approvedAt: ad.approvedAt,
+        imageUrl: ad.imageUrl,
+        videoUrl: ad.videoUrl,
+        requiredReporter: ad.requiredReporter,
+        allStates: ad.allStates,
+        adminSelectState: ad.adminSelectState,
+        adminSelectCities: ad.adminSelectCities,
+        adminSelectPincode: ad.adminSelectPincode,
+        status: ad.status,
+        updatedAt: ad.updatedAt,
         proofs: simplifiedProofs,
+        totalProofs: simplifiedProofs.length
       };
-    }).filter(Boolean);
+    }).filter(Boolean); // Remove null entries (ads with no approved proofs)
+
+    console.log(`✅ Returning ${data.length} running advertisements with approved proofs only`);
 
     return res.status(200).json({ success: true, data });
   } catch (error) {
