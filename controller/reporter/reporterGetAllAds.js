@@ -140,13 +140,40 @@ const reporterGetAllAds = async (req, res) => {
         return false;
       }
       
-      // ✅ Use postStatus instead of accepted field
-      // If reporter has already responded (not pending), don't show the ad
-      if (reporterEntry.postStatus && reporterEntry.postStatus !== "pending") {
+      // ✅ Filter logic: Only show ads where reporter hasn't responded yet
+      // Status meanings:
+      // - undefined/null = No response yet (should show in new ads)
+      // - "pending" + adProof: false = No response yet (should show in new ads) 
+      // - "accepted" = Reporter accepted (should NOT show in new ads - should be in accepted leads)
+      // - "pending" + adProof: true = Proof submitted (should NOT show in new ads - should be in running ads)
+      // - "approved" = Initial proof approved (should NOT show in new ads - should be in running ads)
+      // - "rejected" = Reporter rejected (should NOT show in new ads)
+      
+      // If reporter has accepted the ad, don't show in new ads
+      if (reporterEntry.postStatus === "accepted") {
+        console.log(`🔍 Filtering out ad ${ad._id} - Reporter already accepted (status: accepted)`);
+        return false;
+      }
+      
+      // If reporter has rejected the ad, don't show in new ads
+      if (reporterEntry.postStatus === "rejected") {
+        console.log(`🔍 Filtering out ad ${ad._id} - Reporter already rejected (status: rejected)`);
+        return false;
+      }
+      
+      // If proof was already submitted (adProof: true), don't show in new ads
+      if (reporterEntry.adProof === true) {
+        console.log(`🔍 Filtering out ad ${ad._id} - Proof already submitted (adProof: true, postStatus: ${reporterEntry.postStatus})`);
+        return false;
+      }
+      
+      // If initial proof was approved, don't show in new ads
+      if (reporterEntry.postStatus === "approved") {
+        console.log(`🔍 Filtering out ad ${ad._id} - Initial proof approved (status: approved)`);
         return false;
       }
 
-      // If reporter is in the acceptRejectReporterList and hasn't responded yet (pending), show the ad
+      // If reporter is in the acceptRejectReporterList and hasn't responded yet, show the ad
       // The targeting logic is already handled by notifyMatchingReporters function
       return true;
     });

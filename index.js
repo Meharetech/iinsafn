@@ -17,6 +17,7 @@ const podcastStudioRoutes = require("./routes/podcastRoutes/podcastStudioRoutes"
 const podcastBookingRoutes = require("./routes/podcastRoutes/podcastBookingRoutes")
 const podcastStudioAdminRoutes = require("./routes/adminRoutes/podcastStudioAdminRoutes")
 const podcastBookingAdminRoutes = require("./routes/adminRoutes/podcastBookingAdminRoutes")
+const advocateRoutes = require("./routes/advocateRoutes/advocateRoutes")
 const path = require('path')
 const multerErrorHandler = require('./middlewares/multer/errorHandler')
 
@@ -70,6 +71,7 @@ try{
     app.use('/podcast', podcastBookingRoutes)
     app.use('/admin', podcastStudioAdminRoutes)
     app.use('/admin', podcastBookingAdminRoutes)
+    app.use(advocateRoutes)
 
 
     const PORT = process.env.PORT || 5005;

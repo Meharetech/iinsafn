@@ -3,6 +3,7 @@ const router = express.Router();
 
 const {preRegisterUser , verifyOtp, resendOtp, testOtpSending, testPendingRegistrations} = require('../../controller/user/registerUser')
 const loginUser = require('../../controller/user/loginUser')
+const checkReporterLogin = require('../../controller/user/checkLogin')
 const userAuthenticate = require('../../middlewares/userAuthenticate/userAuthenticate')
 const {getUserProfile, gotoDashboard} = require('../../controller/user/getUserProfile')
 const {forgetPassword, verifyOtpAndResetPassword, setNewPassword, verifyOldPassword, updatePassword} = require("../../controller/user/forgetPassword")
@@ -14,6 +15,7 @@ const {ryvLogIn,ryvLoginOtp} = require("../../controller/user/raiseYourVoiceUser
 router.post("/register", preRegisterUser);
 router.post("/verify-otp",verifyOtp);
 router.post("/login",loginUser);
+router.post("/login/check", checkReporterLogin);
 router.get("/get/user/profile",userAuthenticate,getUserProfile);
 router.get("/goto/dashboard",userAuthenticate,gotoDashboard)
 router.post("/forget/password/send/otp",forgetPassword)
