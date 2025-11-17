@@ -182,111 +182,78 @@ const getReporterAdCounts = async (req, res) => {
     }
 
     const { state: userState, city: userCity, role } = user;
-    const userType = role === "Influencer" ? "influencer" : "reporter";
 
-    // ✅ 1. PENDING COUNT (New Advertisements)
-    // Ads that are approved/modified and reporter hasn't responded yet
-    // Logic matches reporterGetAllAds.js
+    // fetch only approved ads for the user's role (Reporter or Influencer)
     const allApprovedAds = await Adpost.find({ 
-      status: { $in: ["approved", "modified"] },
-      userType: userType
+      status: "approved",
+      userType: role // Target ads based on user's role
     });
 
-    const pendingAds = allApprovedAds.filter((ad) => {
-      // Skip if ad is already full
-      if (ad.acceptReporterCount >= ad.requiredReporter) {
+    // ✅ Pending ads logic (only ads with same state & city as reporter)
+    const filteredPending = allApprovedAds.filter((ad) => {
+      // must match state + city
+      if (ad.adState !== userState || ad.adCity !== userCity) {
         return false;
       }
 
-      // Check if reporter is in the targeted list
-      const reporterEntry = ad.acceptRejectReporterList?.find(
-        (e) => e.reporterId?.toString() === userId.toString()
+      // skip if already full
+      if (
+        typeof ad.requiredReporter === "number" &&
+        typeof ad.acceptReporterCount === "number" &&
+        ad.acceptReporterCount >= ad.requiredReporter
+      ) {
+        return false;
+      }
+
+      // skip if already accepted/rejected by this reporter
+      const alreadyHandled = ad.acceptRejectReporterList?.some(
+        (entry) => entry.reporterId?.toString() === userId.toString()
       );
-      
-      // If reporter is not in the list at all, don't show
-      if (!reporterEntry) {
-        return false;
-      }
-      
-      // If reporter has accepted the ad, don't show in new ads
-      if (reporterEntry.postStatus === "accepted") {
-        return false;
-      }
-      
-      // If reporter has rejected the ad, don't show in new ads
-      if (reporterEntry.postStatus === "rejected") {
-        return false;
-      }
-      
-      // If proof was already submitted (adProof: true), don't show in new ads
-      if (reporterEntry.adProof === true) {
-        return false;
-      }
-      
-      // If initial proof was approved, don't show in new ads
-      if (reporterEntry.postStatus === "approved") {
-        return false;
-      }
+      if (alreadyHandled) return false;
 
-      // If reporter is in the acceptRejectReporterList and hasn't responded yet, show the ad
       return true;
     });
 
-    const pendingCount = pendingAds.length;
+    const pendingCount = filteredPending.length;
 
-    // ✅ 2. ACCEPTED COUNT (Accepted Leads)
-    // Ads where reporter accepted but hasn't submitted proof yet
+    // ✅ Other counts remain same
     const acceptedCount = await Adpost.countDocuments({
       acceptRejectReporterList: {
         $elemMatch: {
           reporterId: userId,
-          postStatus: "accepted", // ✅ Use postStatus field
-          adProof: false // ✅ Only count if proof not submitted yet
-        }
+          accepted: true,
+          adProof: false,
+        },
       },
-      userType: userType
+      userType: role
     });
 
-    // ✅ 3. REJECTED COUNT (Rejected Advertisements)
-    // Ads where reporter rejected
     const rejectedCount = await Adpost.countDocuments({
       acceptRejectReporterList: {
         $elemMatch: {
           reporterId: userId,
-          postStatus: "rejected" // ✅ Use postStatus field
-        }
+          accepted: false,
+        },
       },
-      userType: userType
+      userType: role
     });
 
-    // ✅ 4. RUNNING COUNT (Running Advertisements)
-    // Ads where proof was submitted (status: pending, approved, submitted, or rejected in proof)
     const runningCount = await reporterAdProof.countDocuments({
       proofs: {
         $elemMatch: {
           reporterId: userId,
-          status: { $in: ["pending", "approved", "submitted", "rejected"] } // ✅ All active proof statuses
-        }
-      }
+          status: "running",
+        },
+      },
     });
 
-    // ✅ 5. COMPLETED COUNT (Completed Advertisements)
-    // Ads where proof status is "completed" (work completed and payment credited)
     const completedCount = await reporterAdProof.countDocuments({
       proofs: {
         $elemMatch: {
           reporterId: userId,
-          status: "completed" // ✅ Final completed status
-        }
-      }
-    });
-
-    console.log(`📊 Advertisement Stats for ${role} (${userId}):`, {
-      pending: pendingCount,
-      accepted: acceptedCount,
-      rejected: rejectedCount,
-      running: runningCount,
-      completed: completedCount
+          status: "completed",
+        },
+      },
     });
 
     res.status(200).json({
@@ -305,7 +272,6 @@ const getReporterAdCounts = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error while fetching user ad counts",
-      error: error.message
     });
   }
 };

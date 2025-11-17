@@ -57,70 +57,36 @@ const submitAdProof = async (req, res) => {
       (r) => r.reporterId.toString() === reporterId.toString()
     );
 
-    // ✅ Debug logging
-    console.log("🔍 Submit Proof Debug - Reporter Entry:", {
-      hasEntry: !!reporterEntry,
-      reporterId: reporterId.toString(),
-      adId: adId,
-      postStatus: reporterEntry?.postStatus,
-      accepted: reporterEntry?.accepted,
-      adProof: reporterEntry?.adProof,
-      allEntries: adPost.acceptRejectReporterList.map(r => ({
-        reporterId: r.reporterId?.toString(),
-        postStatus: r.postStatus,
-        accepted: r.accepted
-      }))
-    });
-
-    // ✅ Check if reporter entry exists
-    if (!reporterEntry) {
+    // ✅ Allow submission if:
+    // 1. postStatus is "accepted" (first time submission)
+    // 2. postStatus is "accepted" with initialProofRejectedAt (resubmission after initial proof rejection)
+    if (!reporterEntry || (reporterEntry.postStatus !== "accepted" && reporterEntry.postStatus !== "submitted")) {
       await session.abortTransaction();
       return res.status(403).json({
-        message: "You have not accepted this advertisement. Please accept it first before submitting proof.",
-        debug: {
-          reporterId: reporterId.toString(),
-          adId: adId,
-          availableReporters: adPost.acceptRejectReporterList.length
-        }
-      });
-    }
-
-    // ✅ Check if reporter has accepted the ad
-    if (!reporterEntry.accepted || reporterEntry.postStatus === "rejected") {
-      await session.abortTransaction();
-      return res.status(403).json({
-        message: "You cannot submit proof for this ad. You have either not accepted it or it has been rejected.",
-        currentStatus: reporterEntry.postStatus
-      });
-    }
-
-    // ✅ Allow proof submission if status is: "accepted" or "approved"
-    // - "accepted": Reporter accepted, hasn't submitted proof yet OR proof was rejected and can resubmit
-    // - "approved": Initial proof was approved by admin (edge case - shouldn't happen but allow it)
-    // Note: "pending" means proof already submitted and waiting admin - should NOT allow resubmission
-    // Note: "submitted" is for completion proof, not initial proof
-    const allowedStatuses = ["accepted", "approved"];
-    
-    // Check if proof was already submitted (status is "pending")
-    if (reporterEntry.postStatus === "pending") {
-      await session.abortTransaction();
-      return res.status(403).json({
-        message: "You have already submitted proof for this ad. Please wait for admin approval or rejection before resubmitting.",
-        currentStatus: reporterEntry.postStatus,
-        adProof: reporterEntry.adProof,
-        note: "If your proof was rejected, the status will change back to 'accepted' and you can resubmit."
+        message: "You are not authorized to submit proof for this ad. Please accept the ad first.",
       });
     }
     
-    // Check if status is allowed
-    if (!allowedStatuses.includes(reporterEntry.postStatus)) {
-      await session.abortTransaction();
-      return res.status(403).json({
-        message: `You cannot submit proof at this stage. Current status: ${reporterEntry.postStatus}. Please contact support if you believe this is an error.`,
-        currentStatus: reporterEntry.postStatus,
-        allowedStatuses: allowedStatuses,
-        note: "You can only submit initial proof when status is 'accepted' (or 'approved' in edge cases)"
-      });
+    // ✅ Check if this is a resubmission after initial proof rejection
+    const existingProofDoc = await reporterAdProof.findOne({ adId }).session(session);
+    const existingProof = existingProofDoc?.proofs?.find(
+      (p) => p.reporterId.toString() === reporterId.toString()
+    );
+    
+    // If proof exists and status is "rejected", this is a resubmission of initial proof
+    // Allow it only if initial proof was rejected (not final proof rejection)
+    if (existingProof && existingProof.status === "rejected") {
+      // Check if this is initial proof rejection (has initialProofRejectedAt) or final proof rejection
+      // If it has initialProofRejectedAt, it's initial proof rejection - allow resubmission
+      // If it doesn't have initialProofRejectedAt but has adminRejectedAt, it's final proof rejection - don't allow
+      if (!existingProof.initialProofRejectedAt && existingProof.adminRejectedAt) {
+        await session.abortTransaction();
+        return res.status(403).json({
+          message: "Your final proof was rejected. Please contact admin for assistance.",
+        });
+      }
+      // If initial proof was rejected, allow resubmission
+      console.log("✅ Allowing resubmission of initial proof after rejection");
     }
 
     // ✅ Check 14-hour expiry from acceptedAt
@@ -186,13 +152,22 @@ const submitAdProof = async (req, res) => {
       
       if (existingProofIndex !== -1) {
         // Update existing proof (for resubmission after rejection)
-        // Clear rejection fields when resubmitting
+        // Clear rejection fields when resubmitting initial proof
         const updatedProof = {
           ...newProof,
+          // Clear final proof rejection fields
           adminRejectNote: "",
           adminRejectedBy: null,
           adminRejectedByName: "",
-          adminRejectedAt: null
+          adminRejectedAt: null,
+          // ✅ Clear initial proof rejection fields when resubmitting
+          initialProofRejectedAt: null,
+          initialProofRejectedBy: null,
+          initialProofRejectedByName: "",
+          initialProofRejectNote: "",
+          // Clear completion screenshot if resubmitting initial proof
+          completedTaskScreenshot: "",
+          completionSubmittedAt: null
         };
         adProofDoc.proofs[existingProofIndex] = updatedProof;
       } else {

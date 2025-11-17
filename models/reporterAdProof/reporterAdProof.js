@@ -68,6 +68,37 @@ const proofSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  // ✅ Fields for initial proof approval/rejection tracking
+  initialProofApprovedAt: {
+    type: Date,
+    default: null
+  },
+  initialProofApprovedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Admin",
+    default: null
+  },
+  initialProofApprovedByName: {
+    type: String,
+    default: ""
+  },
+  initialProofRejectedAt: {
+    type: Date,
+    default: null
+  },
+  initialProofRejectedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Admin",
+    default: null
+  },
+  initialProofRejectedByName: {
+    type: String,
+    default: ""
+  },
+  initialProofRejectNote: {
+    type: String,
+    default: ""
+  },
   userRole: {
     type: String,
     enum: ["Reporter", "Influencer"],

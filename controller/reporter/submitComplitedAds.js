@@ -106,11 +106,37 @@ const submitComplitedAds = async (req, res) => {
       screenshotUrl
     });
     
+    // ✅ Check if initial proof was approved - only allow final proof submission if initial proof is approved
+    const existingProof = await reporterAdProof.findOne({
+      adId,
+      "proofs.reporterId": reporterId
+    });
+    
+    if (!existingProof) {
+      return res.status(404).json({ message: "Proof not found. Please submit initial proof first." });
+    }
+    
+    const reporterProof = existingProof.proofs.find(
+      (p) => p.reporterId.toString() === reporterId.toString()
+    );
+    
+    if (!reporterProof) {
+      return res.status(404).json({ message: "Proof not found. Please submit initial proof first." });
+    }
+    
+    // ✅ CRITICAL: Only allow final proof submission if initial proof is APPROVED
+    // If status is "rejected", it means initial proof was rejected - reporter must resubmit initial proof first
+    if (reporterProof.status !== "approved") {
+      return res.status(400).json({ 
+        message: "Initial proof must be approved before submitting final proof. Please resubmit your initial proof first." 
+      });
+    }
+    
     const updatedDoc = await reporterAdProof.findOneAndUpdate(
       {
         adId,
         "proofs.reporterId": reporterId,
-        "proofs.status": { $in: ["approved", "rejected"] }, // ✅ Only allow if initial proof is approved or if resubmitting after rejection
+        "proofs.status": "approved", // ✅ Only allow if initial proof is approved
       },
       {
         $set: {
@@ -149,9 +175,7 @@ const submitComplitedAds = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: updatedDoc?.proofs?.[0]?.status === "rejected" 
-        ? "Completion screenshot resubmitted successfully. Admin will review and approve to mark as completed."
-        : "Completion screenshot submitted successfully. Admin will review and approve to mark as completed.",
+      message: "Completion screenshot submitted successfully. Admin will review and approve to mark as completed.",
       data: updatedDoc,
     });
 
