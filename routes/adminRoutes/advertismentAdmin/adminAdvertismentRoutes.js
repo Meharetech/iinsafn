@@ -16,6 +16,7 @@ const {
   adminGetRunningAds,
   getAllAdsWithAcceptedReporters,
   getAdvertisementTargetedReporters,
+  getFullAdvertisementDetails,
 } = require("../../../controller/admin/adminAdevertismentSection/adminGetAllAds/adminGetAds");
 const freeAds = require("../../../controller/admin/freeAds/freeAds");
 const {freeAdsUpload} = require("../../../middlewares/multer/multer")
@@ -102,6 +103,13 @@ router.get(
   adminAuthenticate,
   verifyAdminAccess("advertisement"),
   getAdvertisementTargetedReporters
+);
+
+router.get(
+  "/admin/get/full/advertisement-details/:adId",
+  adminAuthenticate,
+  verifyAdminAccess("advertisement"),
+  getFullAdvertisementDetails
 );
 
 router.post(

@@ -942,6 +942,42 @@ const getAdvertisementTargetedReporters = async (req, res) => {
   }
 };
 
+// Get full advertisement details with all advertiser information
+const getFullAdvertisementDetails = async (req, res) => {
+  try {
+    const { adId } = req.params;
+    console.log(`🔍 Fetching full advertisement details for: ${adId}`);
+
+    // Find the advertisement with all populated fields
+    const advertisement = await Adpost.findById(adId)
+      .populate('owner', 'name email organization mobile iinsafId role state city pincode')
+      .populate('reporterId', 'name email mobile iinsafId state city role')
+      .lean();
+
+    if (!advertisement) {
+      return res.status(404).json({
+        success: false,
+        message: "Advertisement not found"
+      });
+    }
+
+    console.log(`✅ Found advertisement: ${advertisement._id}`);
+    
+    res.status(200).json({
+      success: true,
+      data: advertisement
+    });
+
+  } catch (error) {
+    console.error("Error fetching full advertisement details:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   adminGetAds,
   approvedAds,
@@ -949,5 +985,6 @@ module.exports = {
   adminModifyAds,
   adminGetRunningAds,
   getAllAdsWithAcceptedReporters,
-  getAdvertisementTargetedReporters
+  getAdvertisementTargetedReporters,
+  getFullAdvertisementDetails
 };
