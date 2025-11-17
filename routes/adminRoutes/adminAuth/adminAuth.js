@@ -17,6 +17,7 @@ const {getRaiseYourVoiceUsers,
 
 const {dashboardStats , ryvUserStats , getFreeAdsStats} = require("../../../controller/admin/adminDashboardStats/dashboardStats")
 const {getAllPayments, adminGetReportersWithdrawlHistory, getAllRefunds} = require("../../../controller/admin/ToatalEarning/Revenue")
+const getWalletByPaymentId = require("../../../controller/admin/wallet/getWalletByPaymentId")
 
 // Middleware: allow /register only if no superadmin exists
 const allowFirstSuperAdminOnly = async (req, res, next) => {
@@ -66,5 +67,6 @@ router.get("/super/admin/get/all/unverified/reporters",getUnverifiedReporters);
 router.get("/admin/get/revenew",adminAuthenticate,isSuperAdmin,getAllPayments)
 router.get("/admin/get/reporters/withdrawl/history",adminAuthenticate,isSuperAdmin,adminGetReportersWithdrawlHistory)
 router.get("/admin/get/refund/history",adminAuthenticate,isSuperAdmin,getAllRefunds)
+router.get("/admin/get/wallet/by-payment-id/:paymentId",adminAuthenticate,isSuperAdmin,getWalletByPaymentId)
 
 module.exports = router;
