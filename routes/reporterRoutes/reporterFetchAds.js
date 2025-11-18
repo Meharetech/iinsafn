@@ -51,6 +51,8 @@ const {submitPaidConferenceProof} = require("../../controller/reporter/paidConfe
 // regular dashboard stats
 const getReporterAdCounts = require("../../controller/reporter/reporterDashboradStas")
 
+// advertisement dashboard stats (specific for /reporter/advertisement page)
+const getReporterAdvertisementDashboardStats = require("../../controller/reporter/reporterAdvertisementDashboardStats")
 
 // free ads dashboard stats
 const getFreeAdCounts = require("../../controller/reporter/freeAds/freeAdStats")
@@ -86,6 +88,9 @@ router.get("/ads/approved-today", getTodaysApprovedAds);
 
 // reporter get regular ads dashboard stats
 router.get("/reporter/get/dashboard/stats",userAuthenticate,getReporterAdCounts)
+
+// reporter get advertisement dashboard stats (for /reporter/advertisement page)
+router.get("/reporter/get/advertisement/dashboard/stats",userAuthenticate,getReporterAdvertisementDashboardStats)
 
 
 //free ad section
