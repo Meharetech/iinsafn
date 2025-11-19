@@ -21,7 +21,7 @@ const getReporterAdvertisementDashboardStats = async (req, res) => {
     }
 
     // Check if user is verified (works for both reporter and influencer)
-    const isVerified = user.role === 'Reporter' ? user.verifiedReporter : user.verifiedInfluencer;
+    const isVerified = user.role === 'Reporter' ? user.verifiedReporter : user.isVerified;
     if (!isVerified) {
       return res.status(403).json({
         success: false,
@@ -74,12 +74,34 @@ const getReporterAdvertisementDashboardStats = async (req, res) => {
 
     const pendingCount = pendingAds.length;
 
-    // 4. ACCEPTED Ads - Ads that reporter has accepted but not yet submitted proof
-    const acceptedCount = await Adpost.countDocuments({
+    // 4. ACCEPTED Ads - Ads that reporter/influencer has accepted but not yet submitted proof
+    // OR ads where initial proof was approved (they appear in accepted ads too)
+    // Also count ads where initial proof was approved (status: "approved")
+    const approvedProofAds = await reporterAdProof.find({
+      proofs: {
+        $elemMatch: {
+          reporterId: userId,
+          status: "approved"
+        }
+      }
+    });
+
+    const approvedAdIds = new Set();
+    approvedProofAds.forEach(doc => {
+      approvedAdIds.add(doc.adId.toString());
+    });
+
+    // Get full ad details to check userType
+    const approvedAds = approvedAdIds.size > 0 
+      ? await Adpost.find({ _id: { $in: Array.from(approvedAdIds) }, userType: userRole })
+      : [];
+    
+    // Combine both counts (avoid duplicates)
+    const acceptedAdIds = new Set();
+    const acceptedAds = await Adpost.find({
       acceptRejectReporterList: {
         $elemMatch: {
           reporterId: userId,
-          accepted: true,
           postStatus: "accepted",
           $or: [
             { adProof: { $exists: false } },
@@ -89,6 +111,14 @@ const getReporterAdvertisementDashboardStats = async (req, res) => {
       },
       userType: userRole
     });
+    acceptedAds.forEach(ad => {
+      acceptedAdIds.add(ad._id.toString());
+    });
+    approvedAds.forEach(ad => {
+      acceptedAdIds.add(ad._id.toString());
+    });
+    
+    const acceptedCount = acceptedAdIds.size;
 
     // 5. REJECTED Ads - Ads that reporter has rejected
     const rejectedCount = await Adpost.countDocuments({
@@ -103,13 +133,13 @@ const getReporterAdvertisementDashboardStats = async (req, res) => {
     });
 
     // 6. RUNNING Ads - Ads where proof has been submitted but not yet completed
-    // Running ads are those with status: "pending", "approved", "submitted", or "rejected"
-    // (basically any status except "completed")
+    // Running ads are those with status: "pending", "submitted", or "rejected"
+    // ✅ Exclude "approved" status - those should appear in accepted ads, not running ads
     const runningProofs = await reporterAdProof.find({
       proofs: {
         $elemMatch: {
           reporterId: userId,
-          status: { $in: ["pending", "approved", "submitted", "rejected"] },
+          status: { $in: ["pending", "submitted", "rejected"] }, // ✅ Exclude "approved"
         },
       },
     });
@@ -119,7 +149,7 @@ const getReporterAdvertisementDashboardStats = async (req, res) => {
     runningProofs.forEach(proofDoc => {
       proofDoc.proofs.forEach(proof => {
         if (proof.reporterId.toString() === userId.toString() && 
-            ["pending", "approved", "submitted", "rejected"].includes(proof.status)) {
+            ["pending", "submitted", "rejected"].includes(proof.status)) { // ✅ Exclude "approved"
           runningAdIds.add(proofDoc.adId.toString());
         }
       });

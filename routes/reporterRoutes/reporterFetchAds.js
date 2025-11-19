@@ -174,6 +174,8 @@ router.post('/influencer/submit/proof',userAuthenticate,reporterProofUpload,subm
 router.get('/influencer/get/running/ads',userAuthenticate,reporterGetRunningAds);
 router.get('/influencer/get/completed/ads',userAuthenticate,reporterGetCompletedAds)
 router.get('/influencer/get/dashboard/stats',userAuthenticate,getReporterAdCounts)
+// influencer get advertisement dashboard stats (for /influencer/advertisement page)
+router.get("/influencer/get/advertisement/dashboard/stats",userAuthenticate,getReporterAdvertisementDashboardStats)
 
 // Influencer wallet routes
 router.get('/influencer/wallet/balance',userAuthenticate,require('../../controller/wallets/getWalletBalance'))

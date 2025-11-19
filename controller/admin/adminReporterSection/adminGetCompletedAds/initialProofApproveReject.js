@@ -77,33 +77,35 @@ const adminApproveInitialProof = async (req, res) => {
 
     console.log("✅ Initial proof approved successfully");
 
-    // 3. Notify reporter
-    const reporter = await User.findById(reporterId);
-    if (reporter) {
+    // 3. Notify user (reporter or influencer)
+    const user = await User.findById(reporterId);
+    const userType = user?.role === "influencer" ? "Influencer" : "Reporter";
+    
+    if (user) {
       // Email notification
       await sendEmail(
-        reporter.email,
+        user.email,
         "Initial Proof Approved ✅",
-        `Hello ${reporter.name},\n\nGood news! Your initial proof for Ad ID: ${adId} has been approved by Admin: ${adminName}.\n\nYou can now proceed to complete the task and submit the final completion screenshot.\n\nRegards,\nIINSAF Team`
+        `Hello ${user.name},\n\nGood news! Your initial proof for Ad ID: ${adId} has been approved by Admin: ${adminName}.\n\nYou can now proceed to complete the task and submit the final completion screenshot.\n\nRegards,\nIINSAF Team`
       );
 
       // WhatsApp notification
-      if (reporter.mobile) {
+      if (user.mobile) {
         await notifyOnWhatsapp(
-          reporter.mobile,
-          Templates.ADMIN_APPROVE_INITIAL_PROOF_NOTIFY_TO_REPORTER, // You'll need to add this template
+          user.mobile,
+          Templates.ADMIN_APPROVE_INITIAL_PROOF_NOTIFY_TO_REPORTER, // Template works for both reporters and influencers
           [
-            reporter.name, // {{1}}
+            user.name, // {{1}}
             adId, // {{2}}
             adminName, // {{3}}
           ]
         );
       }
     }
-
+    
     res.status(200).json({
       success: true,
-      message: "Initial proof approved successfully. Reporter can now proceed with the task.",
+      message: `Initial proof approved successfully. ${userType} can now proceed with the task.`,
       data: {
         adId,
         reporterId,
@@ -211,23 +213,25 @@ const adminRejectInitialProof = async (req, res) => {
 
     console.log("❌ Initial proof rejected successfully");
 
-    // 3. Notify reporter
-    const reporter = await User.findById(reporterId);
-    if (reporter) {
+    // 3. Notify user (reporter or influencer)
+    const user = await User.findById(reporterId);
+    const userType = user?.role === "influencer" ? "Influencer" : "Reporter";
+    
+    if (user) {
       // Email notification
       await sendEmail(
-        reporter.email,
+        user.email,
         "Initial Proof Rejected ❌",
-        `Hello ${reporter.name},\n\nYour initial proof for Ad ID: ${adId} has been rejected by Admin: ${adminName}.\n\nReason: ${adminNote}\n\nPlease review the feedback and resubmit a proper initial proof screenshot to proceed with this task.\n\nRegards,\nIINSAF Team`
+        `Hello ${user.name},\n\nYour initial proof for Ad ID: ${adId} has been rejected by Admin: ${adminName}.\n\nReason: ${adminNote}\n\nPlease review the feedback and resubmit a proper initial proof screenshot to proceed with this task.\n\nRegards,\nIINSAF Team`
       );
 
       // WhatsApp notification
-      if (reporter.mobile) {
+      if (user.mobile) {
         await notifyOnWhatsapp(
-          reporter.mobile,
-          Templates.ADMIN_REJECT_INITIAL_PROOF_NOTIFY_TO_REPORTER, // You'll need to add this template
+          user.mobile,
+          Templates.ADMIN_REJECT_INITIAL_PROOF_NOTIFY_TO_REPORTER, // Template works for both reporters and influencers
           [
-            reporter.name, // {{1}}
+            user.name, // {{1}}
             adId, // {{2}}
             adminNote, // {{3}}
             adminName, // {{4}}
@@ -235,10 +239,10 @@ const adminRejectInitialProof = async (req, res) => {
         );
       }
     }
-
+    
     res.status(200).json({
       success: true,
-      message: "Initial proof rejected. Reporter must resubmit.",
+      message: `Initial proof rejected. ${userType} must resubmit.`,
       data: {
         adId,
         reporterId,

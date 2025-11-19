@@ -206,9 +206,10 @@ const adminApproveAdsProof = async (req, res) => {
     await session.commitTransaction();
 
     // 6. Respond
+    const userTypeText = userForWallet?.role === "Influencer" ? "influencer" : "reporter";
     res.json({
       success: true,
-      message: "Task approved and payment credited to reporter wallet",
+      message: `Task approved and payment credited to ${userTypeText} wallet`,
       updatedProof: proof,
       walletBalance: wallet.balance,
       runningAdStatus: updated.runningAdStatus,
@@ -283,26 +284,27 @@ async function adminRejectAdsProof(req, res) {
 
     await session.commitTransaction();
 
-    // Get reporter details (for email)
-    const reporter = await User.findById(reporterId);
-    if (reporter) {
+    // Get user details (for email) - works for both reporters and influencers
+    const user = await User.findById(reporterId);
+    if (user) {
+      const userType = user.role === "influencer" ? "influencer" : "reporter";
       await sendEmail(
-        reporter.email,
+        user.email,
         "Your Completion Screenshot Has Been Rejected ❌",
         `Hello ${
-          reporter.name
+          user.name
         },\n\nYour completion screenshot for Ad ID: ${adId} has been rejected by Admin: ${adminName}.\nReason: ${
           adminNote || "No reason provided"
         }.\n\nYour initial proof is still valid. Please resubmit the completion screenshot.\n\nRegards,\nTeam`
       );
 
       // 📱 WhatsApp notification
-      if (reporter.mobile) {
+      if (user.mobile) {
         await notifyOnWhatsapp(
-          reporter.mobile,
-          Templates.ADMIN_REJECT_PROOF_UPLOADED_NOTIFY_TO_REPORTER,
+          user.mobile,
+          Templates.ADMIN_REJECT_PROOF_UPLOADED_NOTIFY_TO_REPORTER, // Template works for both
           [
-            reporter.name,
+            user.name,
             adId,
             adminNote || "No reason provided",
             adminName,
