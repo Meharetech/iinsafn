@@ -18,6 +18,7 @@ const {getRaiseYourVoiceUsers,
 const {dashboardStats , ryvUserStats , getFreeAdsStats} = require("../../../controller/admin/adminDashboardStats/dashboardStats")
 const {getAllPayments, adminGetReportersWithdrawlHistory, getAllRefunds} = require("../../../controller/admin/ToatalEarning/Revenue")
 const getWalletByPaymentId = require("../../../controller/admin/wallet/getWalletByPaymentId")
+const {clearAllPaymentsAndWallets, getPaymentsAndWalletsSummary} = require("../../../controller/admin/clearAllPaymentsAndWallets")
 
 // Middleware: allow /register only if no superadmin exists
 const allowFirstSuperAdminOnly = async (req, res, next) => {
@@ -68,5 +69,9 @@ router.get("/admin/get/revenew",adminAuthenticate,isSuperAdmin,getAllPayments)
 router.get("/admin/get/reporters/withdrawl/history",adminAuthenticate,isSuperAdmin,adminGetReportersWithdrawlHistory)
 router.get("/admin/get/refund/history",adminAuthenticate,isSuperAdmin,getAllRefunds)
 router.get("/admin/get/wallet/by-payment-id/:paymentId",adminAuthenticate,isSuperAdmin,getWalletByPaymentId)
+
+// ⚠️ DANGER ZONE: Clear all payment history, wallets, withdrawal requests, and withdrawal history
+router.get("/admin/payments-wallets/summary",adminAuthenticate,isSuperAdmin,getPaymentsAndWalletsSummary)
+router.post("/admin/clear/all/payments-and-wallets",adminAuthenticate,isSuperAdmin,clearAllPaymentsAndWallets)
 
 module.exports = router;
