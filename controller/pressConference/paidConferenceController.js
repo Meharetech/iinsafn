@@ -827,15 +827,31 @@ const verifyPayment = async (req, res) => {
 
     // Only save successful "paid" payments, not "captured"
     if (payment.status === "paid") {
+      // Fetch current GST rate from pricing settings
+      const pricing = await AdPricing.findOne().sort({ createdAt: -1 });
+      const gstRate = pricing?.gstRate || 0; // Default to 0 if not set
+      
+      const totalAmount = payment.amount / 100; // Razorpay returns in paise
+      
+      // Calculate GST: if total includes GST, reverse-calculate
+      // Formula: total = subtotal + (subtotal * gstRate/100)
+      // So: subtotal = total / (1 + gstRate/100)
+      // And: gst = total - subtotal
+      let gstAmount = 0;
+      if (gstRate > 0) {
+        const subtotal = totalAmount / (1 + gstRate / 100);
+        gstAmount = totalAmount - subtotal;
+      }
+      
       const newHistory = new paymentHistory({
         user: userId,
         paymentId: paymentId,
-        amount: payment.amount / 100, // Razorpay returns in paise
+        amount: totalAmount,
         currency: payment.currency,
         method: payment.method,
         status: payment.status,
-        totalCost: payment.amount / 100,
-        gst: (payment.amount / 100) * 0.18, // if 18% GST
+        totalCost: totalAmount,
+        gst: gstAmount,
       });
 
       await newHistory.save();

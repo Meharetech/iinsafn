@@ -3,6 +3,7 @@ const Razorpay = require("razorpay");
 const paymentHistory = require("../../models/paymentHistory/paymentHistory");
 const User = require("../../models/userModel/userModel");
 const Wallet = require("../../models/Wallet/walletSchema");
+const AdPricing = require("../../models/adminModels/advertismentPriceSet/adPricingSchema");
 const mongoose = require("mongoose");
 
 
@@ -64,15 +65,31 @@ const successOrNot = async (req, res) => {
 
     // Only save successful payments
     if (payment.status === "captured") {
+      // Fetch current GST rate from pricing settings
+      const pricing = await AdPricing.findOne().sort({ createdAt: -1 });
+      const gstRate = pricing?.gstRate || 0; // Default to 0 if not set
+      
+      const totalAmount = payment.amount / 100; // Razorpay returns in paise
+      
+      // Calculate GST: if total includes GST, reverse-calculate
+      // Formula: total = subtotal + (subtotal * gstRate/100)
+      // So: subtotal = total / (1 + gstRate/100)
+      // And: gst = total - subtotal
+      let gstAmount = 0;
+      if (gstRate > 0) {
+        const subtotal = totalAmount / (1 + gstRate / 100);
+        gstAmount = totalAmount - subtotal;
+      }
+      
       const newHistory = new paymentHistory({
         user: userId,
         paymentId: paymentId,
-        amount: payment.amount / 100, // Razorpay returns in paise
+        amount: totalAmount,
         currency: payment.currency,
         method: payment.method,
         status: payment.status,
-        totalCost: payment.amount / 100,
-        gst: (payment.amount / 100) * 0.18, // if 18% GST
+        totalCost: totalAmount,
+        gst: gstAmount,
       });
 
       await newHistory.save();
@@ -119,10 +136,22 @@ const payFromWallet = async (req, res) => {
       return res.status(400).json({ success: false, message: "Insufficient wallet balance" });
     }
 
+    // Fetch current GST rate from pricing settings
+    const pricing = await AdPricing.findOne().sort({ createdAt: -1 });
+    const gstRate = (pricing?.gstRate || 0) / 100; // Convert percentage to decimal
+    
     // generate paymentId
     const paymentId = generatePaymentId();
-    const gstRate = 0.18;
-    const gstAmount = amount * gstRate;
+    
+    // Calculate GST: if amount includes GST, reverse-calculate
+    // Formula: amount = subtotal + (subtotal * gstRate)
+    // So: subtotal = amount / (1 + gstRate)
+    // And: gst = amount - subtotal
+    let gstAmount = 0;
+    if (gstRate > 0) {
+      const subtotal = amount / (1 + gstRate);
+      gstAmount = amount - subtotal;
+    }
 
     // transaction-supported flag
     const supportsTransactions = mongoose.connection.client.s.options.replicaSet;
@@ -243,6 +272,10 @@ const walletPaymentSuccess = async (req, res) => {
 
     const amountInRupees = payment.amount / 100;
 
+    // ✅ Wallet top-up should have 0 GST (it's just adding money to wallet, not a purchase)
+    // GST should not apply to wallet top-ups
+    const gstAmount = 0;
+
     // Save wallet payment history
     const newHistory = new paymentHistory({
       user: userId,
@@ -252,7 +285,7 @@ const walletPaymentSuccess = async (req, res) => {
       method: payment.method,
       status: payment.status,
       totalCost: amountInRupees,
-      gst: amountInRupees * 0.18,
+      gst: gstAmount, // ✅ 0 GST for wallet top-ups
       type: "Wallet Top-Up",
     });
     await newHistory.save();
