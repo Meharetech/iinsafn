@@ -303,9 +303,24 @@ const postAdd = async (req, res) => {
       (reporterBudget / requiredReporter).toFixed(2)
     ); // 2 decimal points
 
+    // ✅ Prepare ad data - exclude adState and adCity if they're empty or not provided
+    // Users provide pfState and pfCities (preference), not adState/adCity
+    const adData = { ...body };
+    
+    // Remove adState and adCity if they're empty strings, undefined, or not provided
+    // These fields are optional and not needed when using preference area (pfState/pfCities)
+    if (adData.adState === undefined || adData.adState === null || 
+        (typeof adData.adState === 'string' && adData.adState.trim() === '')) {
+      delete adData.adState;
+    }
+    if (adData.adCity === undefined || adData.adCity === null || 
+        (typeof adData.adCity === 'string' && adData.adCity.trim() === '')) {
+      delete adData.adCity;
+    }
+
     // ✅ Create ad post
     const newAd = new Adpost({
-      ...body,
+      ...adData,
       imageUrl,
       videoUrl,
       owner: req.userId,
