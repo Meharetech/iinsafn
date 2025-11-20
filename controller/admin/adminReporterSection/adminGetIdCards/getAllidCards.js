@@ -136,13 +136,18 @@ const approveIdCardStatus = async (req, res) => {
     }
 
     // 🔹 Step 2: Update linked User by reporter ObjectId
+    // ✅ CRITICAL: Set verifiedReporter = true when ID card is approved
     let updatedUser = null;
     if (updatedCard.reporter) {
       updatedUser = await User.findByIdAndUpdate(
         updatedCard.reporter,
-        { iinsafId },
+        { 
+          iinsafId,
+          verifiedReporter: true // ✅ Automatically verify user when ID card is approved
+        },
         { new: true }
       );
+      console.log(`✅ User ${updatedCard.reporter} verified (verifiedReporter set to true) for role: ${userRole}`);
     }
 
     //  Send approval email

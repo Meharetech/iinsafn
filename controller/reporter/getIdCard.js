@@ -19,12 +19,28 @@ const getIdCard = async (req, res) => {
     const status = reportersIdCard.status;
 
     if (status === "Approved") {
+      // ✅ Update verifiedReporter = true in User collection (works for both Reporter and Influencer)
+      const updatedUser = await User.findByIdAndUpdate(
+        reporterId, 
+        { verifiedReporter: true },
+        { new: true }
+      );
+      
+      // ✅ Double-check: Ensure user is actually verified
+      if (!updatedUser) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
 
-      //  Update verifiedReporter = true in User collection
-      await User.findByIdAndUpdate(reporterId, { verifiedReporter: true });
+      console.log(`✅ User ${reporterId} (${updatedUser.role}) verified - verifiedReporter set to true`);
+
       return res.status(201).json({
         success: true,
         data: reportersIdCard,
+        verified: true,
+        message: "ID card approved. You are now verified and can access paid advertisements."
       });
     } else if (status === "Under Review") {
       return res.status(200).json({

@@ -4,6 +4,30 @@ const reporterAdProof = require("../../models/reporterAdProof/reporterAdProof");
 const getAcceptedAds = async (req, res) => {
   try {
     const reporterId = req.user._id;
+    const User = require("../../models/userModel/userModel");
+    const genrateIdCard = require("../../models/reporterIdGenrate/genrateIdCard");
+
+    // ✅ VERIFICATION CHECK: Only verified users can access paid ads
+    const user = await User.findById(reporterId);
+    if (!user || !user.verifiedReporter) {
+      const userType = user?.role === "Influencer" ? "influencer" : "reporter";
+      return res.status(403).json({
+        success: false,
+        message: `You are not a verified ${userType}. Please apply for and get your ID card approved first to access paid advertisements.`,
+        data: []
+      });
+    }
+
+    // ✅ Additional check: Verify ID card status is actually "Approved"
+    const idCard = await genrateIdCard.findOne({ reporter: reporterId });
+    if (!idCard || idCard.status !== "Approved") {
+      const userType = user.role === "Influencer" ? "influencer" : "reporter";
+      return res.status(403).json({
+        success: false,
+        message: `Your ID card is not approved yet. Please wait for admin approval to access paid advertisements.`,
+        data: []
+      });
+    }
 
     // ✅ Step 1: Find ads where user accepted but hasn't submitted proof yet (postStatus: "accepted", adProof: false)
     const matchedAds = await Adpost.find({
@@ -101,9 +125,32 @@ const getAcceptedAds = async (req, res) => {
 
 
 const getRejectedAds = async(req,res)=>{
-
     try {
         const reporterId = req.user._id;
+        const User = require("../../models/userModel/userModel");
+        const genrateIdCard = require("../../models/reporterIdGenrate/genrateIdCard");
+
+        // ✅ VERIFICATION CHECK: Only verified users can access paid ads
+        const user = await User.findById(reporterId);
+        if (!user || !user.verifiedReporter) {
+            const userType = user?.role === "Influencer" ? "influencer" : "reporter";
+            return res.status(403).json({
+                success: false,
+                message: `You are not a verified ${userType}. Please apply for and get your ID card approved first to access paid advertisements.`,
+                data: []
+            });
+        }
+
+        // ✅ Additional check: Verify ID card status is actually "Approved"
+        const idCard = await genrateIdCard.findOne({ reporter: reporterId });
+        if (!idCard || idCard.status !== "Approved") {
+            const userType = user.role === "Influencer" ? "influencer" : "reporter";
+            return res.status(403).json({
+                success: false,
+                message: `Your ID card is not approved yet. Please wait for admin approval to access paid advertisements.`,
+                data: []
+            });
+        }
 
         // Find ads rejected by this specific reporter
         const matchedAds = await Adpost.find({

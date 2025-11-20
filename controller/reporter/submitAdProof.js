@@ -217,6 +217,30 @@ const submitAdProof = async (req, res) => {
 const reporterGetRunningAds = async (req, res) => {
   try {
     const reporterId = req.user._id;
+    const User = require("../../models/userModel/userModel");
+    const genrateIdCard = require("../../models/reporterIdGenrate/genrateIdCard");
+
+    // ✅ VERIFICATION CHECK: Only verified users can access paid ads
+    const user = await User.findById(reporterId);
+    if (!user || !user.verifiedReporter) {
+      const userType = user?.role === "Influencer" ? "influencer" : "reporter";
+      return res.status(403).json({
+        success: false,
+        message: `You are not a verified ${userType}. Please apply for and get your ID card approved first to access paid advertisements.`,
+        data: []
+      });
+    }
+
+    // ✅ Additional check: Verify ID card status is actually "Approved"
+    const idCard = await genrateIdCard.findOne({ reporter: reporterId });
+    if (!idCard || idCard.status !== "Approved") {
+      const userType = user.role === "Influencer" ? "influencer" : "reporter";
+      return res.status(403).json({
+        success: false,
+        message: `Your ID card is not approved yet. Please wait for admin approval to access paid advertisements.`,
+        data: []
+      });
+    }
 
     console.log("🔍 Reporter ID:", reporterId);
 
@@ -296,6 +320,30 @@ const reporterGetRunningAds = async (req, res) => {
 const reporterGetCompletedAds = async (req, res) => {
   try {
     const reporterId = req.user._id;
+    const User = require("../../models/userModel/userModel");
+    const genrateIdCard = require("../../models/reporterIdGenrate/genrateIdCard");
+
+    // ✅ VERIFICATION CHECK: Only verified users can access paid ads
+    const user = await User.findById(reporterId);
+    if (!user || !user.verifiedReporter) {
+      const userType = user?.role === "Influencer" ? "influencer" : "reporter";
+      return res.status(403).json({
+        success: false,
+        message: `You are not a verified ${userType}. Please apply for and get your ID card approved first to access paid advertisements.`,
+        data: []
+      });
+    }
+
+    // ✅ Additional check: Verify ID card status is actually "Approved"
+    const idCard = await genrateIdCard.findOne({ reporter: reporterId });
+    if (!idCard || idCard.status !== "Approved") {
+      const userType = user.role === "Influencer" ? "influencer" : "reporter";
+      return res.status(403).json({
+        success: false,
+        message: `Your ID card is not approved yet. Please wait for admin approval to access paid advertisements.`,
+        data: []
+      });
+    }
 
     // Step 1: Find all documents that include this reporter with completed status
     const completedAds = await reporterAdProof.find({

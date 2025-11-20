@@ -94,24 +94,27 @@ const reporterGetAllAds = async (req, res) => {
       });
     }
 
-    // Step 2: Ensure user is verified with ID card (works for both reporters and influencers)
-    // Check if user has verifiedReporter status AND has an iinsafId (ID card)
+    // Step 2: ✅ STRICT VERIFICATION CHECK - Only verified users can see paid ads
+    // Check if user has verified ID card (verifiedReporter field)
     if (!reporter.verifiedReporter) {
       const userType = reporter.role === "Influencer" ? "influencer" : "reporter";
       return res.status(403).json({
         success: false,
-        message:
-          `You are not a verified ${userType}. Please apply for your ID card first and wait for verification.`,
+        message: `You are not a verified ${userType}. Please apply for and get your ID card approved first to view paid advertisements.`,
+        data: [] // Return empty array
       });
     }
 
-    // Additional check: Ensure user has an iinsafId (ID card issued)
-    if (!reporter.iinsafId || reporter.iinsafId.trim() === '') {
+    // ✅ Additional check: Verify ID card status is actually "Approved"
+    const genrateIdCard = require("../../models/reporterIdGenrate/genrateIdCard");
+    const idCard = await genrateIdCard.findOne({ reporter: reporterId });
+    
+    if (!idCard || idCard.status !== "Approved") {
       const userType = reporter.role === "Influencer" ? "influencer" : "reporter";
       return res.status(403).json({
         success: false,
-        message:
-          `Your ID card has not been issued yet. Please apply for your ID card first and wait for verification.`,
+        message: `Your ID card is not approved yet. Please wait for admin approval to view paid advertisements.`,
+        data: [] // Return empty array
       });
     }
 
@@ -123,8 +126,11 @@ const reporterGetAllAds = async (req, res) => {
     });
 
     // Step 4: Filter ads according to strict priority
-    // Note: Verification is already checked above, so we can proceed with filtering
+    // ✅ Only show ads to verified users (already checked above, but double-check for safety)
     const filteredAds = allApprovedAds.filter((ad) => {
+      // ✅ CRITICAL: Only verified users can see paid ads
+      if (!reporter.verifiedReporter) return false;
+
       // Filter by user type - only show ads that match the user's role
       const userRole = reporter.role; // "Reporter" or "Influencer"
       const adUserType = ad.userType; // "reporter" or "influencer"

@@ -16,6 +16,31 @@ const acceptAd = async (req, res) => {
     const userIinsafId = req.user.iinsafId;
     const adId = req.params.adId;
 
+    // ✅ VERIFICATION CHECK: Only verified users can accept paid ads
+    const User = require("../../models/userModel/userModel");
+    const genrateIdCard = require("../../models/reporterIdGenrate/genrateIdCard");
+    
+    const user = await User.findById(userId).session(session);
+    if (!user || !user.verifiedReporter) {
+      await session.abortTransaction();
+      const userType = user?.role === "Influencer" ? "influencer" : "reporter";
+      return res.status(403).json({
+        success: false,
+        message: `You are not a verified ${userType}. Please apply for and get your ID card approved first to accept paid advertisements.`
+      });
+    }
+
+    // ✅ Additional check: Verify ID card status is actually "Approved"
+    const idCard = await genrateIdCard.findOne({ reporter: userId });
+    if (!idCard || idCard.status !== "Approved") {
+      await session.abortTransaction();
+      const userType = user.role === "Influencer" ? "influencer" : "reporter";
+      return res.status(403).json({
+        success: false,
+        message: `Your ID card is not approved yet. Please wait for admin approval to accept paid advertisements.`
+      });
+    }
+
     if (!adId) {
       await session.abortTransaction();
       return res
@@ -182,6 +207,31 @@ const rejectAd = async (req, res) => {
     const adId = req.params.adId;
     const userIinsafId = req.user.iinsafId;
     const { note } = req.body; // note = rejection reason
+
+    // ✅ VERIFICATION CHECK: Only verified users can reject paid ads
+    const User = require("../../models/userModel/userModel");
+    const genrateIdCard = require("../../models/reporterIdGenrate/genrateIdCard");
+    
+    const user = await User.findById(userId).session(session);
+    if (!user || !user.verifiedReporter) {
+      await session.abortTransaction();
+      const userType = user?.role === "Influencer" ? "influencer" : "reporter";
+      return res.status(403).json({
+        success: false,
+        message: `You are not a verified ${userType}. Please apply for and get your ID card approved first to interact with paid advertisements.`
+      });
+    }
+
+    // ✅ Additional check: Verify ID card status is actually "Approved"
+    const idCard = await genrateIdCard.findOne({ reporter: userId });
+    if (!idCard || idCard.status !== "Approved") {
+      await session.abortTransaction();
+      const userType = user.role === "Influencer" ? "influencer" : "reporter";
+      return res.status(403).json({
+        success: false,
+        message: `Your ID card is not approved yet. Please wait for admin approval to interact with paid advertisements.`
+      });
+    }
 
     console.log("🔍 Reject Ad Debug - userId:", userId);
     console.log("🔍 Reject Ad Debug - userId type:", typeof userId);
