@@ -94,13 +94,24 @@ const reporterGetAllAds = async (req, res) => {
       });
     }
 
-    // Step 2: Ensure user is verified (works for both reporters and influencers)
+    // Step 2: Ensure user is verified with ID card (works for both reporters and influencers)
+    // Check if user has verifiedReporter status AND has an iinsafId (ID card)
     if (!reporter.verifiedReporter) {
       const userType = reporter.role === "Influencer" ? "influencer" : "reporter";
       return res.status(403).json({
         success: false,
         message:
-          `You are not a verified ${userType}. Please apply for your ID card first.`,
+          `You are not a verified ${userType}. Please apply for your ID card first and wait for verification.`,
+      });
+    }
+
+    // Additional check: Ensure user has an iinsafId (ID card issued)
+    if (!reporter.iinsafId || reporter.iinsafId.trim() === '') {
+      const userType = reporter.role === "Influencer" ? "influencer" : "reporter";
+      return res.status(403).json({
+        success: false,
+        message:
+          `Your ID card has not been issued yet. Please apply for your ID card first and wait for verification.`,
       });
     }
 
@@ -112,9 +123,8 @@ const reporterGetAllAds = async (req, res) => {
     });
 
     // Step 4: Filter ads according to strict priority
+    // Note: Verification is already checked above, so we can proceed with filtering
     const filteredAds = allApprovedAds.filter((ad) => {
-      if (!reporter.verifiedReporter) return false;
-
       // Filter by user type - only show ads that match the user's role
       const userRole = reporter.role; // "Reporter" or "Influencer"
       const adUserType = ad.userType; // "reporter" or "influencer"
