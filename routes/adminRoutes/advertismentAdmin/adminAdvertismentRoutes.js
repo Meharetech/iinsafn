@@ -7,6 +7,14 @@ const {
   acceptingAdTimeing,
   setReporterPrice,
   setPaidConferenceCommission,
+  // Ad Type Management
+  addAdType,
+  editAdType,
+  deleteAdType,
+  // Channel Type Management
+  addChannelType,
+  editChannelType,
+  deleteChannelType,
 } = require("../../../controller/admin/adminAdevertismentSection/adminSetAdPrice/adminSetAdPrice");
 const {
   adminGetAds,
@@ -53,6 +61,50 @@ router.post(
   adminAuthenticate,
   isSuperAdmin,
   setPaidConferenceCommission
+);
+
+// ==================== AD TYPE MANAGEMENT ROUTES ====================
+router.post(
+  "/admin/ad-type/add",
+  adminAuthenticate,
+  isSuperAdmin,
+  addAdType
+);
+
+router.put(
+  "/admin/ad-type/edit/:id",
+  adminAuthenticate,
+  isSuperAdmin,
+  editAdType
+);
+
+router.delete(
+  "/admin/ad-type/delete/:id",
+  adminAuthenticate,
+  isSuperAdmin,
+  deleteAdType
+);
+
+// ==================== CHANNEL TYPE MANAGEMENT ROUTES ====================
+router.post(
+  "/admin/channel-type/add",
+  adminAuthenticate,
+  isSuperAdmin,
+  addChannelType
+);
+
+router.put(
+  "/admin/channel-type/edit/:id",
+  adminAuthenticate,
+  isSuperAdmin,
+  editChannelType
+);
+
+router.delete(
+  "/admin/channel-type/delete/:id",
+  adminAuthenticate,
+  isSuperAdmin,
+  deleteChannelType
 );
 
 // Apply both middlewares per route
