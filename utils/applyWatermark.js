@@ -18,7 +18,7 @@ const applyWatermark = async (inputPath, type = "video", options = {}) => {
   const ext = path.extname(inputPath);
   const baseName = path.basename(inputPath, ext);
   const outputPath = path.join(tempDir, `${baseName}_watermarked${ext}`);
-  const watermarkText = "official@iinsaf";
+  const watermarkText = "The copyright and legal responsibility for this advertisement/Raise Your Voice lie solely with the advertiser/creator. @iinsafofficial”";
 
   console.log(`🔧 Watermarking ${type}:`, inputPath);
 
@@ -58,8 +58,8 @@ const applyWatermark = async (inputPath, type = "video", options = {}) => {
       const finalWidth = finalMetadata.width;
       const finalHeight = finalMetadata.height;
 
-      const fontSize = Math.floor(Math.min(finalWidth, finalHeight) * 0.08); // 8% of smaller dimension
-      const padding = 20;
+      const fontSize = Math.floor(Math.min(finalWidth, finalHeight) * 0.025); // 2.5% of smaller dimension for small corner watermark
+      const padding = 10;
       
       // Calculate text dimensions more accurately
       const textWidth = watermarkText.length * fontSize * 0.6; // Approximate text width
@@ -131,7 +131,7 @@ const applyWatermark = async (inputPath, type = "video", options = {}) => {
         .videoCodec("libx264")
         .format("mp4")
         .outputOptions([
-          `-vf drawtext=text='${watermarkText}':x=20:y=20:fontsize=48:fontcolor=white@0.7:box=1:boxcolor=black@0.3:boxborderw=5`,
+          `-vf drawtext=text='${watermarkText}':x=10:y=10:fontsize=16:fontcolor=white@0.7:box=1:boxcolor=black@0.3:boxborderw=2`,
         ])
         .on("end", () => {
           console.log(`✅ Video watermarked saved to: ${outputPath}`);

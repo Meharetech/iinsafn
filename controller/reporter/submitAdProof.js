@@ -243,13 +243,15 @@ const reporterGetRunningAds = async (req, res) => {
       });
     });
 
-    // 1. Find all adProof documents where this reporter has a proof with status 'pending', 'submitted', or 'rejected'
-    // ✅ Exclude 'approved' status - those should appear in accepted ads, not running ads
+    // 1. Find all adProof documents where this reporter has a proof with status
+    //    'pending', 'approved', 'submitted', or 'rejected'. We now include
+    //    `approved` so reporters can see that admins have cleared their initial
+    //    proof and allow them to progress towards the final submission.
     const runningAds = await reporterAdProof.find({
       proofs: {
         $elemMatch: {
           reporterId: reporterId,
-          status: { $in: ["pending", "submitted", "rejected"] }, // ✅ Exclude "approved" - those go to accepted ads
+          status: { $in: ["pending", "approved", "submitted", "rejected"] },
         },
       },
     });
@@ -260,7 +262,7 @@ const reporterGetRunningAds = async (req, res) => {
     const filteredAds = runningAds.map((doc) => {
       const reporterProof = doc.proofs.find(
         (proof) => proof.reporterId.toString() === reporterId.toString() && 
-                  (proof.status === "pending" || proof.status === "submitted" || proof.status === "rejected")
+                  ["pending", "approved", "submitted", "rejected"].includes(proof.status)
       );
 
       return {
@@ -279,7 +281,7 @@ const reporterGetRunningAds = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Running ads fetched successfully (includes pending, submitted, and rejected proofs. Approved initial proofs appear in accepted ads.)",
+      message: "Running ads fetched successfully (includes pending, approved, submitted, and rejected proofs).",
       data: filteredAds,
     });
   } catch (error) {
