@@ -58,30 +58,59 @@ const applyWatermark = async (inputPath, type = "video", options = {}) => {
       const finalWidth = finalMetadata.width;
       const finalHeight = finalMetadata.height;
 
-      const fontSize = Math.floor(Math.min(finalWidth, finalHeight) * 0.025); // 2.5% of smaller dimension for small corner watermark
       const padding = 10;
+      const minFontSize = 8; // Minimum font size
+      const maxFontSize = Math.floor(Math.min(finalWidth, finalHeight) * 0.025); // 2.5% of smaller dimension
       
-      // Calculate text dimensions more accurately
-      const textWidth = watermarkText.length * fontSize * 0.6; // Approximate text width
-      const textHeight = fontSize;
+      // Calculate maximum allowed watermark width (leave padding on both sides)
+      const maxWatermarkWidth = finalWidth - (padding * 2);
+      const maxWatermarkHeight = finalHeight - (padding * 2);
+      
+      // Start with initial font size
+      let fontSize = maxFontSize;
+      let textWidth = watermarkText.length * fontSize * 0.6; // Approximate text width
+      let textHeight = fontSize;
+      
+      // Reduce font size if text is too wide
+      while (textWidth > maxWatermarkWidth && fontSize > minFontSize) {
+        fontSize = Math.max(minFontSize, fontSize - 1);
+        textWidth = watermarkText.length * fontSize * 0.6;
+        textHeight = fontSize;
+      }
+      
+      // If still too wide after font reduction, cap the width
+      if (textWidth > maxWatermarkWidth) {
+        textWidth = maxWatermarkWidth;
+      }
+      
+      // Ensure text height doesn't exceed available space
+      if (textHeight > maxWatermarkHeight) {
+        textHeight = maxWatermarkHeight;
+      }
       
       // Calculate watermark position (bottom right)
       const watermarkX = finalWidth - textWidth - padding;
       const watermarkY = finalHeight - textHeight - padding;
       
       // Ensure watermark doesn't go outside image bounds
-      const safeX = Math.max(0, Math.min(watermarkX, finalWidth - textWidth));
-      const safeY = Math.max(0, Math.min(watermarkY, finalHeight - textHeight));
+      const safeX = Math.max(padding, Math.min(watermarkX, finalWidth - textWidth - padding));
+      const safeY = Math.max(padding, Math.min(watermarkY, finalHeight - textHeight - padding));
+      
+      // Ensure SVG dimensions never exceed image dimensions
+      const svgWidth = Math.min(textWidth + (padding * 2), finalWidth - safeX);
+      const svgHeight = Math.min(textHeight + (padding * 2), finalHeight - safeY);
 
       console.log(`📐 Watermark text: "${watermarkText}"`);
       console.log(`📐 Font size: ${fontSize}px`);
       console.log(`📐 Text dimensions: ${textWidth}x${textHeight}`);
+      console.log(`📐 SVG dimensions: ${svgWidth}x${svgHeight}`);
       console.log(`📐 Position: ${safeX},${safeY}`);
+      console.log(`📐 Image dimensions: ${finalWidth}x${finalHeight}`);
 
-      // Create a minimal SVG with just the text
+      // Create SVG with proper dimensions
       const svgText = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${textWidth + 10}" height="${textHeight + 10}">
-          <text x="${textWidth}" y="${textHeight}" 
+        <svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}">
+          <text x="${svgWidth - padding}" y="${svgHeight - padding}" 
                 font-size="${fontSize}" 
                 fill="rgba(255, 255, 255, 0.8)" 
                 stroke="rgba(0, 0, 0, 0.5)" 
@@ -92,14 +121,18 @@ const applyWatermark = async (inputPath, type = "video", options = {}) => {
         </svg>
       `;
 
-      console.log(`🔧 Creating watermark SVG: ${textWidth + 10}x${textHeight + 10}`);
+      console.log(`🔧 Creating watermark SVG: ${svgWidth}x${svgHeight}`);
 
       try {
+        // Ensure composite position and size are valid
+        const compositeLeft = Math.max(0, Math.min(safeX, finalWidth - svgWidth));
+        const compositeTop = Math.max(0, Math.min(safeY, finalHeight - svgHeight));
+        
         await image
           .composite([{ 
             input: Buffer.from(svgText), 
-            top: safeY - 5, 
-            left: safeX - 5,
+            top: compositeTop, 
+            left: compositeLeft,
             blend: 'over'
           }])
           .jpeg({ quality: quality }) // Convert to JPEG with specified quality
