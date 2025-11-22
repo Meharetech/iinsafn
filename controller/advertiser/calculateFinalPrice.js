@@ -56,7 +56,7 @@ const calculateFinalPrice = async (req, res) => {
         // Apply discount based on type
         if (coupon.type === 'percentage') {
           discountAmount = (coupon.discount / 100) * finalPrice;
-        } else if (coupon.type === 'flat') {
+        } else if (coupon.type === 'flat' || coupon.type === 'fixed') {
           discountAmount = coupon.discount;
         }
 
