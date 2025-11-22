@@ -160,20 +160,36 @@ const applyWatermark = async (inputPath, type = "video", options = {}) => {
 
   if (type === "video") {
     return new Promise((resolve, reject) => {
+      // Escape single quotes in watermark text for FFmpeg
+      const escapedText = watermarkText.replace(/'/g, "\\'");
+      
       ffmpeg(inputPath)
         .videoCodec("libx264")
         .format("mp4")
         .outputOptions([
-          `-vf drawtext=text='${watermarkText}':x=10:y=10:fontsize=16:fontcolor=white@0.7:box=1:boxcolor=black@0.3:boxborderw=2`,
+          `-vf drawtext=text='${escapedText}':x=10:y=10:fontsize=16:fontcolor=white@0.7:box=1:boxcolor=black@0.3:boxborderw=2`,
         ])
+        .on("start", (commandLine) => {
+          console.log(`🔧 FFmpeg command: ${commandLine}`);
+        })
+        .on("progress", (progress) => {
+          console.log(`⏳ Video watermarking progress: ${Math.round(progress.percent || 0)}%`);
+        })
         .on("end", () => {
           console.log(`✅ Video watermarked saved to: ${outputPath}`);
           resolve(outputPath);
         })
         .on("error", (err) => {
           console.error("❌ FFmpeg error:", err);
-          if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-          reject(err);
+          console.error("❌ FFmpeg error message:", err.message);
+          if (fs.existsSync(outputPath)) {
+            try {
+              fs.unlinkSync(outputPath);
+            } catch (unlinkErr) {
+              console.error("❌ Error deleting failed output file:", unlinkErr);
+            }
+          }
+          reject(new Error(`Video watermarking failed: ${err.message || err.toString()}`));
         })
         .save(outputPath);
     });

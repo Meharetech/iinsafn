@@ -161,41 +161,85 @@ const approvedAds = async (req, res) => {
 
     let updatedImageUrl = ad.imageUrl;
     let updatedVideoUrl = ad.videoUrl;
+    const watermarkErrors = [];
 
     // ✅ Process Image
-    if (ad.imageUrl) {
-      const tempImagePath = path.join(tempFolder, `${Date.now()}_image.png`);
-      await downloadFile(ad.imageUrl, tempImagePath);
-      const watermarkedImage = await applyWatermark(tempImagePath, "image", {
-        maxWidth: 1920,
-        maxHeight: 1080,
-        quality: 85,
-        cropToFit: true
-      });
-      const uploadImage = await uploadToCloudinary(
-        watermarkedImage,
-        "ads/images"
-      );
-      updatedImageUrl = uploadImage.secure_url;
+    if (ad.imageUrl && ad.imageUrl.trim() !== '') {
+      try {
+        console.log(`🖼️ Processing image watermark for ad ${adId}: ${ad.imageUrl}`);
+        const tempImagePath = path.join(tempFolder, `${Date.now()}_image.png`);
+        await downloadFile(ad.imageUrl, tempImagePath);
+        
+        const watermarkedImage = await applyWatermark(tempImagePath, "image", {
+          maxWidth: 1920,
+          maxHeight: 1080,
+          quality: 85,
+          cropToFit: true
+        });
+        
+        const uploadImage = await uploadToCloudinary(
+          watermarkedImage,
+          "ads/images"
+        );
+        
+        if (uploadImage && uploadImage.secure_url) {
+          updatedImageUrl = uploadImage.secure_url;
+          console.log(`✅ Image watermarked and uploaded successfully: ${updatedImageUrl}`);
+        } else {
+          throw new Error("Image upload to Cloudinary failed - no secure_url returned");
+        }
 
-      // Delete temp files safely
-      await fsp.unlink(tempImagePath).catch(() => {});
-      await fsp.unlink(watermarkedImage).catch(() => {});
+        // Delete temp files safely
+        await fsp.unlink(tempImagePath).catch(() => {});
+        await fsp.unlink(watermarkedImage).catch(() => {});
+      } catch (imageError) {
+        console.error(`❌ Image watermark processing failed for ad ${adId}:`, imageError);
+        watermarkErrors.push(`Image watermark failed: ${imageError.message}`);
+        // Keep original image URL if watermark fails
+        updatedImageUrl = ad.imageUrl;
+      }
     }
 
     // ✅ Process Video
-    if (ad.videoUrl) {
-      const tempVideoPath = path.join(tempFolder, `${Date.now()}_video.mp4`);
-      await downloadFile(ad.videoUrl, tempVideoPath);
-      const watermarkedVideo = await applyWatermark(tempVideoPath, "video");
-      const uploadVideo = await uploadToCloudinary(
-        watermarkedVideo,
-        "ads/videos"
-      );
-      updatedVideoUrl = uploadVideo.secure_url;
+    if (ad.videoUrl && ad.videoUrl.trim() !== '') {
+      try {
+        console.log(`🎥 Processing video watermark for ad ${adId}: ${ad.videoUrl}`);
+        const tempVideoPath = path.join(tempFolder, `${Date.now()}_video.mp4`);
+        await downloadFile(ad.videoUrl, tempVideoPath);
+        
+        const watermarkedVideo = await applyWatermark(tempVideoPath, "video");
+        
+        const uploadVideo = await uploadToCloudinary(
+          watermarkedVideo,
+          "ads/videos"
+        );
+        
+        if (uploadVideo && uploadVideo.secure_url) {
+          updatedVideoUrl = uploadVideo.secure_url;
+          console.log(`✅ Video watermarked and uploaded successfully: ${updatedVideoUrl}`);
+        } else {
+          throw new Error("Video upload to Cloudinary failed - no secure_url returned");
+        }
 
-      await fsp.unlink(tempVideoPath).catch(() => {});
-      await fsp.unlink(watermarkedVideo).catch(() => {});
+        await fsp.unlink(tempVideoPath).catch(() => {});
+        await fsp.unlink(watermarkedVideo).catch(() => {});
+      } catch (videoError) {
+        console.error(`❌ Video watermark processing failed for ad ${adId}:`, videoError);
+        watermarkErrors.push(`Video watermark failed: ${videoError.message}`);
+        // Keep original video URL if watermark fails
+        updatedVideoUrl = ad.videoUrl;
+      }
+    }
+
+    // ✅ If watermark processing failed, return error to admin
+    if (watermarkErrors.length > 0) {
+      await session.abortTransaction();
+      return res.status(500).json({ 
+        success: false, 
+        message: "Failed to apply watermark to advertisement media. Please try again or contact support.",
+        errors: watermarkErrors,
+        details: watermarkErrors.join("; ")
+      });
     }
 
     // ✅ Save actually targeted reporters before updating ad
@@ -274,7 +318,20 @@ const approvedAds = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     console.error("Error approving ad:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    
+    // Provide detailed error message to admin
+    let errorMessage = "Failed to approve advertisement";
+    if (err.message) {
+      errorMessage = err.message;
+    } else if (err.toString) {
+      errorMessage = err.toString();
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   } finally {
     session.endSession();
   }
@@ -332,9 +389,11 @@ const adminModifyAds = async (req, res) => {
     let updatedImageUrl = ad.imageUrl;
     let updatedVideoUrl = ad.videoUrl;
 
+    const watermarkErrors = [];
+
     if (ad.imageUrl && ad.imageUrl.trim() !== '') {
       try {
-        console.log(`🖼️ Processing image: ${ad.imageUrl}`);
+        console.log(`🖼️ Processing image watermark for ad ${adId}: ${ad.imageUrl}`);
         const tempImagePath = path.join(tempFolder, `${Date.now()}_image.png`);
         await downloadFile(ad.imageUrl, tempImagePath);
         
@@ -344,6 +403,7 @@ const adminModifyAds = async (req, res) => {
           quality: 85,
           cropToFit: true
         });
+        
         const uploadImage = await uploadToCloudinary(
           watermarkedImage,
           "ads/images"
@@ -351,28 +411,30 @@ const adminModifyAds = async (req, res) => {
         
         if (uploadImage && uploadImage.secure_url) {
           updatedImageUrl = uploadImage.secure_url;
-          console.log(`✅ Image watermarked and uploaded: ${updatedImageUrl}`);
+          console.log(`✅ Image watermarked and uploaded successfully: ${updatedImageUrl}`);
         } else {
-          console.warn(`⚠️ Image upload failed, keeping original: ${ad.imageUrl}`);
+          throw new Error("Image upload to Cloudinary failed - no secure_url returned");
         }
 
         // Clean up temp files
         await fsp.unlink(tempImagePath).catch(() => {});
         await fsp.unlink(watermarkedImage).catch(() => {});
       } catch (imageError) {
-        console.error(`❌ Image processing failed:`, imageError.message);
-        console.log(`🔄 Keeping original image URL: ${ad.imageUrl}`);
-        // Keep original image URL if processing fails
+        console.error(`❌ Image watermark processing failed for ad ${adId}:`, imageError);
+        watermarkErrors.push(`Image watermark failed: ${imageError.message}`);
+        // Keep original image URL if watermark fails
+        updatedImageUrl = ad.imageUrl;
       }
     }
 
     if (ad.videoUrl && ad.videoUrl.trim() !== '') {
       try {
-        console.log(`🎥 Processing video: ${ad.videoUrl}`);
+        console.log(`🎥 Processing video watermark for ad ${adId}: ${ad.videoUrl}`);
         const tempVideoPath = path.join(tempFolder, `${Date.now()}_video.mp4`);
         await downloadFile(ad.videoUrl, tempVideoPath);
         
         const watermarkedVideo = await applyWatermark(tempVideoPath, "video");
+        
         const uploadVideo = await uploadToCloudinary(
           watermarkedVideo,
           "ads/videos"
@@ -380,19 +442,31 @@ const adminModifyAds = async (req, res) => {
         
         if (uploadVideo && uploadVideo.secure_url) {
           updatedVideoUrl = uploadVideo.secure_url;
-          console.log(`✅ Video watermarked and uploaded: ${updatedVideoUrl}`);
+          console.log(`✅ Video watermarked and uploaded successfully: ${updatedVideoUrl}`);
         } else {
-          console.warn(`⚠️ Video upload failed, keeping original: ${ad.videoUrl}`);
+          throw new Error("Video upload to Cloudinary failed - no secure_url returned");
         }
 
         // Clean up temp files
         await fsp.unlink(tempVideoPath).catch(() => {});
         await fsp.unlink(watermarkedVideo).catch(() => {});
       } catch (videoError) {
-        console.error(`❌ Video processing failed:`, videoError.message);
-        console.log(`🔄 Keeping original video URL: ${ad.videoUrl}`);
-        // Keep original video URL if processing fails
+        console.error(`❌ Video watermark processing failed for ad ${adId}:`, videoError);
+        watermarkErrors.push(`Video watermark failed: ${videoError.message}`);
+        // Keep original video URL if watermark fails
+        updatedVideoUrl = ad.videoUrl;
       }
+    }
+
+    // ✅ If watermark processing failed, return error to admin
+    if (watermarkErrors.length > 0) {
+      await session.abortTransaction();
+      return res.status(500).json({ 
+        success: false, 
+        message: "Failed to apply watermark to advertisement media. Please try again or contact support.",
+        errors: watermarkErrors,
+        details: watermarkErrors.join("; ")
+      });
     }
 
     // ✅ Update ad fields - PRESERVE existing targeting and ADD new targeting
