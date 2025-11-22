@@ -43,8 +43,9 @@ const calculatePaidConferencePrice = async (req, res) => {
     }
 
     const reporterPrice = pricing.reporterPrice || 0;
-    const gstRate = pricing.gstRate || 18;
-    console.log("Reporter price:", reporterPrice, "GST rate:", gstRate);
+    // ✅ Use GST rate from admin settings, default to 0 if not set (not 18)
+    const gstRate = pricing.gstRate !== undefined && pricing.gstRate !== null ? pricing.gstRate : 0;
+    console.log("Reporter price:", reporterPrice, "GST rate from admin settings:", gstRate);
     console.log("Full pricing object:", JSON.stringify(pricing, null, 2));
 
     // Calculate pricing
@@ -99,7 +100,8 @@ const createPaidConferenceOrder = async (req, res) => {
     }
 
     const reporterPrice = pricing.reporterPrice || 0;
-    const gstRate = pricing.gstRate || 18;
+    // ✅ Use GST rate from admin settings, default to 0 if not set (not 18)
+    const gstRate = pricing.gstRate !== undefined && pricing.gstRate !== null ? pricing.gstRate : 0;
 
     // Calculate pricing
     const subtotal = numberOfReporters * reporterPrice;
@@ -217,7 +219,8 @@ const submitPaidConference = async (req, res) => {
     }
 
     const reporterPrice = pricing.reporterPrice || 0;
-    const gstRate = pricing.gstRate || 18;
+    // ✅ Use GST rate from admin settings, default to 0 if not set (not 18)
+    const gstRate = pricing.gstRate !== undefined && pricing.gstRate !== null ? pricing.gstRate : 0;
 
     // Calculate pricing
     const subtotal = numberOfReporters * reporterPrice;
@@ -311,6 +314,7 @@ const submitPaidConference = async (req, res) => {
         status: paymentMethod === "wallet" ? "paid" : "captured",
         totalCost: totalAmount,
         gst: gstAmount,
+        gstRate: gstRate, // Store GST rate for reference
       });
 
       await newHistory.save();
@@ -833,13 +837,14 @@ const verifyPayment = async (req, res) => {
       
       const totalAmount = payment.amount / 100; // Razorpay returns in paise
       
-      // Calculate GST: if total includes GST, reverse-calculate
+      // ✅ Calculate GST using the same formula as in createPaidConferenceOrder
       // Formula: total = subtotal + (subtotal * gstRate/100)
       // So: subtotal = total / (1 + gstRate/100)
       // And: gst = total - subtotal
       let gstAmount = 0;
+      let subtotal = totalAmount;
       if (gstRate > 0) {
-        const subtotal = totalAmount / (1 + gstRate / 100);
+        subtotal = totalAmount / (1 + gstRate / 100);
         gstAmount = totalAmount - subtotal;
       }
       
@@ -852,10 +857,11 @@ const verifyPayment = async (req, res) => {
         status: payment.status,
         totalCost: totalAmount,
         gst: gstAmount,
+        gstRate: gstRate, // Store GST rate for reference
       });
 
       await newHistory.save();
-      console.log("Payment history saved for press conference user (paid status only)");
+      console.log(`✅ Payment history saved with GST: ₹${gstAmount} (${gstRate}%) on total: ₹${totalAmount}`);
     } else {
       console.log("Payment not saved to history - status is:", payment.status, "(only 'paid' status is saved)");
     }
@@ -887,17 +893,34 @@ const getPaymentHistory = async (req, res) => {
     const paymentHistoryRecords = await paymentHistory.find({ user: userId })
       .sort({ createdAt: -1 });
 
+    // Get current GST rate from pricing settings
+    const pricing = await AdPricing.findOne();
+    const currentGstRate = pricing?.gstRate || 0;
+
     // Combine and format the data
     const allPayments = [];
 
     // Add paid conference payments (only "paid" status)
     paidConferences.forEach(conference => {
       if (conference.paymentId && conference.paymentAmount > 0 && conference.paymentStatus === 'paid') {
+        // Calculate GST from total amount if not already stored
+        let gstAmount = 0;
+        let subtotal = conference.paymentAmount;
+        if (currentGstRate > 0) {
+          // Reverse calculate: total = subtotal + (subtotal * gstRate/100)
+          // So: subtotal = total / (1 + gstRate/100)
+          subtotal = conference.paymentAmount / (1 + currentGstRate / 100);
+          gstAmount = conference.paymentAmount - subtotal;
+        }
+
         allPayments.push({
           _id: conference._id,
           paymentId: conference.paymentId,
           conferenceId: conference.conferenceId,
           amount: conference.paymentAmount,
+          subtotal: subtotal,
+          gst: gstAmount,
+          gstRate: currentGstRate,
           status: conference.paymentStatus,
           method: 'Razorpay',
           currency: 'INR',
@@ -910,11 +933,26 @@ const getPaymentHistory = async (req, res) => {
     // Add payment history entries (only "paid" status, not "captured")
     paymentHistoryRecords.forEach(payment => {
       if (payment.status === 'paid') {
+        // Use stored GST if available, otherwise calculate
+        let gstAmount = payment.gst || 0;
+        let subtotal = payment.amount;
+        if (gstAmount === 0 && currentGstRate > 0) {
+          // Calculate GST if not stored
+          subtotal = payment.amount / (1 + currentGstRate / 100);
+          gstAmount = payment.amount - subtotal;
+        } else if (gstAmount > 0) {
+          // Calculate subtotal from stored GST
+          subtotal = payment.amount - gstAmount;
+        }
+
         allPayments.push({
           _id: payment._id,
           paymentId: payment.paymentId,
           conferenceId: payment.conferenceId || 'N/A',
           amount: payment.amount,
+          subtotal: subtotal,
+          gst: gstAmount,
+          gstRate: currentGstRate,
           status: payment.status,
           method: payment.method,
           currency: payment.currency,

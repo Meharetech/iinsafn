@@ -20,6 +20,7 @@ const paymentHistorySchema = new mongoose.Schema({
     method: String,
     status: String,
     gst: Number,
+    gstRate: Number, // GST rate percentage used for this payment
     totalCost: Number,
     date: {
         type: Date,

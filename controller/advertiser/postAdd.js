@@ -189,6 +189,58 @@ const postAdd = async (req, res) => {
   try {
     const body = req.body;
 
+    // ✅ Handle platforms array from FormData
+    // FormData sends arrays as platforms[0], platforms[1], etc.
+    // Express/multer might parse this in different ways, so we need to check all possibilities
+    let platformsArray = [];
+    
+    // Method 1: Check if platforms is already an array
+    if (body.platforms && Array.isArray(body.platforms)) {
+      platformsArray = body.platforms.filter(p => p && typeof p === 'string' && p.trim() !== '');
+      console.log("✅ Platforms found as array:", platformsArray);
+    }
+    // Method 2: Check if platforms is an object with numeric keys (most common with FormData)
+    else if (body.platforms && typeof body.platforms === 'object' && body.platforms !== null) {
+      const keys = Object.keys(body.platforms);
+      if (keys.length > 0) {
+        platformsArray = keys
+          .filter(key => !isNaN(parseInt(key))) // Only numeric keys
+          .sort((a, b) => parseInt(a) - parseInt(b))
+          .map(key => body.platforms[key])
+          .filter(p => p && typeof p === 'string' && p.trim() !== '');
+        console.log("✅ Platforms parsed from object:", platformsArray);
+      }
+    }
+    // Method 3: Check if platforms is a string
+    else if (body.platforms && typeof body.platforms === 'string') {
+      platformsArray = body.platforms.trim() !== '' ? [body.platforms.trim()] : [];
+      console.log("✅ Platforms found as string:", platformsArray);
+    }
+    // Method 4: Check for bracket notation in all body keys (platforms[0], platforms[1], etc.)
+    else {
+      const platformKeys = Object.keys(body).filter(key => 
+        key.startsWith('platforms[') && key.endsWith(']')
+      );
+      
+      if (platformKeys.length > 0) {
+        platformsArray = platformKeys
+          .map(key => {
+            const match = key.match(/platforms\[(\d+)\]/);
+            return match ? { index: parseInt(match[1]), value: body[key] } : null;
+          })
+          .filter(item => item && item.value && typeof item.value === 'string' && item.value.trim() !== '')
+          .sort((a, b) => a.index - b.index)
+          .map(item => item.value.trim());
+        console.log("✅ Platforms parsed from bracket notation:", platformsArray);
+      }
+    }
+    
+    // Set platforms in body
+    body.platforms = platformsArray;
+    
+    console.log("🔍 Debug - Final platforms array:", platformsArray, "Length:", platformsArray.length);
+    console.log("🔍 Debug - All body keys:", Object.keys(body).filter(k => k.includes('platform')));
+
     // ✅ Required fields check
     const requiredFields = [
       "adType",
@@ -318,7 +370,16 @@ const postAdd = async (req, res) => {
       delete adData.adCity;
     }
 
-    // ✅ Create ad post
+    // ✅ Ensure platforms is properly set from the parsed array (already set in body.platforms above)
+    // body.platforms was already parsed and set as an array above, so adData.platforms should have it
+    // But ensure it's definitely an array
+    const finalPlatforms = (body.platforms && Array.isArray(body.platforms)) ? body.platforms : [];
+    adData.platforms = finalPlatforms;
+    
+    console.log("🔍 Debug - platforms in adData before save:", adData.platforms, "Length:", adData.platforms.length);
+    console.log("🔍 Debug - body.platforms:", body.platforms, "Type:", Array.isArray(body.platforms));
+
+    // ✅ Create ad post - explicitly include platforms
     const newAd = new Adpost({
       ...adData,
       imageUrl,
@@ -329,7 +390,16 @@ const postAdd = async (req, res) => {
       adCommissionRate: commissionRate,
       baseView: baseView, // ✅ Store baseView for view distribution
       requiredReporter: requiredReporter, // ✅ Store calculated requiredReporter
+      platforms: finalPlatforms, // ✅ Explicitly set platforms from parsed array
     });
+    
+    console.log("🔍 Debug - platforms in newAd after creation:", newAd.platforms, "Length:", newAd.platforms ? newAd.platforms.length : 0);
+    
+    await newAd.save();
+    
+    // ✅ Verify platforms were saved correctly
+    const savedAd = await Adpost.findById(newAd._id);
+    console.log("🔍 Debug - platforms after save (from DB):", savedAd.platforms, "Length:", savedAd.platforms ? savedAd.platforms.length : 0);
 
     await newAd.save();
 

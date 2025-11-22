@@ -11,6 +11,10 @@ const advertisementSchema = new mongoose.Schema(
       type: [String],
       required: true,
     },
+    platforms: {
+      type: [String],
+      default: [],
+    },
     adPreference: {
       type: [String],
     },

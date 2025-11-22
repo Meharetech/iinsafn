@@ -20,12 +20,29 @@ const RefundLog = require("../../../../models/WithdrawalRequest/refundLogSchema"
 
 const adminGetAds = async (req, res) => {
   try {
+    // Fetch ads with all fields including platforms
     const ads = await Adpost.find()
       .populate('owner', 'name email organization mobile iinsafId role') // Populate owner with user details
       .sort({ createdAt: -1 }); // optional: latest ads first
     
-    console.log(`📊 Fetched ${ads.length} advertisements with owner details`);
-    res.status(200).json(ads);
+    // ✅ Convert to plain objects and ensure platforms field is included
+    const adsWithPlatforms = ads.map(ad => {
+      const adObj = ad.toObject ? ad.toObject() : ad;
+      return {
+        ...adObj,
+        platforms: adObj.platforms || [], // Ensure platforms is always an array, even if undefined
+      };
+    });
+    
+    // Log platforms data for debugging
+    console.log(`📊 Fetched ${adsWithPlatforms.length} advertisements with owner details`);
+    adsWithPlatforms.forEach((ad, index) => {
+      if (index < 3) { // Log first 3 ads for debugging
+        console.log(`📋 Ad ${index + 1} (${ad._id}): platforms =`, ad.platforms, "Type:", Array.isArray(ad.platforms));
+      }
+    });
+    
+    res.status(200).json(adsWithPlatforms);
   } catch (error) {
     console.error("Error fetching ads:", error);
     res
