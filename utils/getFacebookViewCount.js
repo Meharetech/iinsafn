@@ -1,63 +1,69 @@
-const puppeteer = require("puppeteer");
+const { Builder } = require("selenium-webdriver");
+const chrome = require("selenium-webdriver/chrome");
 
-const getFacebookViewCount = async (videoUrl) => {
-  console.log("🚀 Starting Facebook views extraction with Puppeteer...");
+const getFacebookViewCount = async (videoUrl, options = {}) => {
+  const {
+    headless = true,
+    timeout = 60000,
+    waitTime = 5000
+  } = options;
+
+  console.log("🚀 Starting Facebook views extraction with Selenium...");
   console.log(`📱 URL: ${videoUrl}\n`);
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: [
+  let driver = null;
+
+  try {
+    const chromeOptions = new chrome.Options();
+    
+    if (headless) {
+      chromeOptions.addArguments("--headless");
+    }
+    
+    chromeOptions.addArguments(
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      "--disable-accelerated-2d-canvas",
       "--disable-gpu",
-      "--disable-web-security",
-      "--disable-features=IsolateOrigins,site-per-process"
-    ]
-  });
-
-  try {
-    const page = await browser.newPage();
-    
-    // Set user agent to avoid detection
-    await page.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      "--window-size=1920,1080"
     );
 
-    await page.goto(videoUrl, { 
-      waitUntil: "networkidle2", 
-      timeout: 60000 
-    });
+    driver = await new Builder()
+      .forBrowser("chrome")
+      .setChromeOptions(chromeOptions)
+      .build();
 
-    // Wait a bit for dynamic content to load
-    await page.waitForTimeout(3000);
+    await driver.get(videoUrl);
+    await driver.manage().setTimeouts({ implicit: timeout });
+    
+    // Wait for page to load
+    await new Promise(resolve => setTimeout(resolve, waitTime));
 
     console.log("🔍 Searching for view counts...");
 
     // ✅ Method 1: Look through all spans for text containing "views"
-    let viewsText = await page.evaluate(() => {
+    let viewsText = await driver.executeScript(() => {
       const spans = Array.from(document.querySelectorAll("span"));
-      const match = spans.find(el => el.innerText && el.innerText.toLowerCase().includes("views"));
-      return match ? match.innerText.trim() : null;
+      const match = spans.find(el => el.innerText && el.innerText.includes("views"));
+      return match ? match.innerText : null;
     });
 
     // ✅ Method 2: Fallback - search for specific attributes/classes
     if (!viewsText) {
-      viewsText = await page.evaluate(() => {
+      viewsText = await driver.executeScript(() => {
         const selectors = [
           'span[data-testid="video-view-count"]',
           'div[class*="view"]',
-          '[aria-label*="views"]',
-          'span[class*="view"]',
-          'div[data-testid*="view"]'
+          '[aria-label*="views"]'
         ];
         for (let sel of selectors) {
-          const elements = document.querySelectorAll(sel);
-          for (let el of elements) {
-            if (el && el.innerText && el.innerText.toLowerCase().includes("views")) {
-              return el.innerText.trim();
+          try {
+            const el = document.querySelector(sel);
+            if (el && el.innerText && el.innerText.includes("views")) {
+              return el.innerText;
             }
+          } catch (e) {
+            continue;
           }
         }
         return null;
@@ -66,9 +72,9 @@ const getFacebookViewCount = async (videoUrl) => {
 
     // ✅ Method 3: Regex fallback (scan page HTML)
     if (!viewsText) {
-      const html = await page.content();
-      const match = html.match(/(\d+[.,]?\d*\s*[KMB]?\s*views?)/i);
-      viewsText = match ? match[0].trim() : null;
+      const html = await driver.getPageSource();
+      const match = html.match(/(\d+[.,]?\d*\s*[KMB]?\s*views)/i);
+      viewsText = match ? match[0] : null;
     }
 
     console.log("✅ Found views:", viewsText);
@@ -76,12 +82,11 @@ const getFacebookViewCount = async (videoUrl) => {
 
   } catch (err) {
     console.error("💥 ERROR:", err.message);
-    if (err.stack) {
-      console.error("Stack:", err.stack);
-    }
     return null;
   } finally {
-    await browser.close();
+    if (driver) {
+      await driver.quit();
+    }
   }
 };
 
