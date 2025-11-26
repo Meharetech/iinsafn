@@ -29,58 +29,94 @@ const getAcceptedAds = async (req, res) => {
       });
     }
 
-    // ✅ Step 1: Find ads where user accepted but hasn't submitted proof yet (postStatus: "accepted", adProof: false)
+    // ✅ Step 1: Find ads where user accepted (postStatus: "accepted" or "proof_rejected")
+    // "proof_rejected" means final proof was rejected by admin - user needs to resubmit
     const matchedAds = await Adpost.find({
       acceptRejectReporterList: {
         $elemMatch: {
           reporterId: reporterId,
-          postStatus: "accepted", // ✅ Use new postStatus field
-          adProof: false // ✅ Only show if adProof is still false (no initial proof submitted yet)
+          postStatus: { $in: ["accepted", "proof_rejected"] } // ✅ Show accepted ads and proof_rejected (final proof rejected)
         }
       }
     });
 
-    // ✅ Step 2: Find ads where initial proof was approved (proof status: "approved")
-    // These should also appear in accepted ads so user can proceed with final proof
-    const approvedProofAds = await reporterAdProof.find({
-      proofs: {
-        $elemMatch: {
-          reporterId: reporterId,
-          status: "approved" // ✅ Initial proof approved - user can now proceed with final proof
-        }
+    // ✅ Step 2: Get all proof documents for these ads
+    const adIds = matchedAds.map(ad => ad._id);
+    const allProofDocs = await reporterAdProof.find({
+      adId: { $in: adIds }
+    });
+
+    // ✅ Step 3: Filter ads - only show if user needs to take action
+    const filteredAds = matchedAds.filter(ad => {
+      const reporterEntry = ad.acceptRejectReporterList.find(
+        r => r.reporterId.toString() === reporterId.toString()
+      );
+
+      if (!reporterEntry) {
+        return false; // No entry found
       }
+
+      // ✅ Show if postStatus is "proof_rejected" (final proof rejected by admin - user needs to resubmit)
+      if (reporterEntry.postStatus === "proof_rejected") {
+        return true;
+      }
+
+      // ✅ Show if postStatus is "accepted"
+      if (reporterEntry.postStatus !== "accepted") {
+        return false; // Wrong status
+      }
+
+      // Find proof for this ad and reporter
+      const proofDoc = allProofDocs.find(doc => doc.adId.toString() === ad._id.toString());
+      const userProof = proofDoc?.proofs?.find(
+        p => p.reporterId.toString() === reporterId.toString()
+      );
+
+      // ✅ Show if:
+      // 1. No proof submitted yet (adProof: false)
+      if (!reporterEntry.adProof && !userProof) {
+        return true;
+      }
+
+      // 2. Initial proof was approved - user can submit final proof
+      if (userProof && userProof.status === "approved") {
+        return true;
+      }
+
+      // 3. Initial proof was rejected by admin - user needs to resubmit initial proof
+      if (userProof && userProof.status === "rejected" && userProof.initialProofRejectedAt) {
+        return true;
+      }
+
+      // ✅ Don't show if:
+      // - Proof is submitted (waiting for admin review)
+      // - Proof is completed
+      if (userProof && (userProof.status === "submitted" || userProof.status === "completed")) {
+        return false;
+      }
+
+      // Don't show if postStatus indicates proof already submitted (but not proof_rejected)
+      if (reporterEntry.postStatus === "pending" || 
+          reporterEntry.postStatus === "submitted" || 
+          reporterEntry.postStatus === "proof_submitted" || 
+          reporterEntry.postStatus === "completed") {
+        return false;
+      }
+
+      return false; // Default: don't show
     });
 
-    // ✅ Step 3: Get adIds from approved proofs
-    const approvedAdIds = approvedProofAds.map(doc => doc.adId.toString());
-
-    // ✅ Step 4: Fetch full ad details for approved proofs
-    const approvedAds = approvedAdIds.length > 0 
-      ? await Adpost.find({ _id: { $in: approvedAdIds } })
-      : [];
-
-    // ✅ Step 5: Combine both sets of ads (avoid duplicates)
-    const allAdsMap = new Map();
-    
-    // Add matched ads (accepted but no proof submitted)
-    matchedAds.forEach(ad => {
-      allAdsMap.set(ad._id.toString(), ad);
-    });
-
-    // Add approved proof ads (initial proof approved)
-    approvedAds.forEach(ad => {
-      allAdsMap.set(ad._id.toString(), ad);
-    });
-
-    const allAds = Array.from(allAdsMap.values());
-
-    // ✅ Step 6: Enhanced response with rejection information for initial proofs and proof data
-    const enhancedAds = allAds.map(ad => {
-      const reporterEntry = ad.acceptRejectReporterList.find(r => r.reporterId.toString() === reporterId.toString());
+    // ✅ Step 4: Enhanced response with proof data
+    const enhancedAds = filteredAds.map(ad => {
+      const reporterEntry = ad.acceptRejectReporterList.find(
+        r => r.reporterId.toString() === reporterId.toString()
+      );
       
       // Find proof data if exists
-      const proofDoc = approvedProofAds.find(doc => doc.adId.toString() === ad._id.toString());
-      const proofData = proofDoc?.proofs?.find(p => p.reporterId.toString() === reporterId.toString() && p.status === "approved");
+      const proofDoc = allProofDocs.find(doc => doc.adId.toString() === ad._id.toString());
+      const proofData = proofDoc?.proofs?.find(
+        p => p.reporterId.toString() === reporterId.toString()
+      );
 
       return {
         ...ad.toObject(),
@@ -93,7 +129,7 @@ const getAcceptedAds = async (req, res) => {
           initialProofRejectedAt: reporterEntry?.initialProofRejectedAt,
           initialProofRejectedByName: reporterEntry?.initialProofRejectedByName,
         },
-        // ✅ Include proof data if initial proof was approved
+        // ✅ Include proof data if exists and is relevant
         proofs: proofData ? [proofData] : [],
         proofInfo: proofData ? {
           status: proofData.status,
@@ -104,6 +140,8 @@ const getAcceptedAds = async (req, res) => {
           duration: proofData.duration,
           initialProofApprovedAt: proofData.initialProofApprovedAt,
           initialProofApprovedByName: proofData.initialProofApprovedByName,
+          initialProofRejectedAt: proofData.initialProofRejectedAt,
+          initialProofRejectNote: proofData.initialProofRejectNote,
         } : null
       };
     });

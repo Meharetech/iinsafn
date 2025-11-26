@@ -294,6 +294,17 @@ const approvedAds = async (req, res) => {
       console.log(`💾 Saved ${targetReporters.length} actually targeted reporters for ad ${ad._id}:`, targetReporters.map(u => u._id));
     }
 
+    // ✅ Clean up invalid postStatus values before saving
+    if (ad.acceptRejectReporterList && ad.acceptRejectReporterList.length > 0) {
+      const validStatuses = ["pending", "accepted", "submitted", "completed", "rejected", "proof_submitted", "proof_rejected"];
+      ad.acceptRejectReporterList.forEach((entry, index) => {
+        if (entry.postStatus && !validStatuses.includes(entry.postStatus)) {
+          console.log(`⚠️ Fixing invalid postStatus "${entry.postStatus}" at index ${index} - replacing with "accepted"`);
+          entry.postStatus = "accepted";
+        }
+      });
+    }
+
     // ✅ Update ad with transaction
     ad.status = "approved";
     ad.approvedAt = approvedAt;
@@ -545,6 +556,16 @@ const adminModifyAds = async (req, res) => {
         accepted: r.accepted,
         adProof: r.adProof
       })));
+      
+      // ✅ Clean up invalid postStatus values before saving
+      // Replace "approved" with "accepted" (closest valid value)
+      const validStatuses = ["pending", "accepted", "submitted", "completed", "rejected", "proof_submitted", "proof_rejected"];
+      ad.acceptRejectReporterList.forEach((entry, index) => {
+        if (entry.postStatus && !validStatuses.includes(entry.postStatus)) {
+          console.log(`⚠️ Fixing invalid postStatus "${entry.postStatus}" at index ${index} - replacing with "accepted"`);
+          entry.postStatus = "accepted";
+        }
+      });
     }
     
     // Note: updatedAt will be automatically set by mongoose timestamps

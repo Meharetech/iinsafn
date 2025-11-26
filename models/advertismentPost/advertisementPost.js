@@ -200,5 +200,26 @@ const advertisementSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// ✅ Pre-save hook to clean up invalid postStatus values
+advertisementSchema.pre("save", function (next) {
+  if (this.acceptRejectReporterList && Array.isArray(this.acceptRejectReporterList)) {
+    const validStatuses = ["pending", "accepted", "submitted", "completed", "rejected", "proof_submitted", "proof_rejected"];
+    let fixedCount = 0;
+    
+    this.acceptRejectReporterList.forEach((entry) => {
+      if (entry.postStatus && !validStatuses.includes(entry.postStatus)) {
+        console.log(`⚠️ Auto-fixing invalid postStatus "${entry.postStatus}" - replacing with "accepted"`);
+        entry.postStatus = "accepted";
+        fixedCount++;
+      }
+    });
+    
+    if (fixedCount > 0) {
+      console.log(`✅ Fixed ${fixedCount} invalid postStatus value(s) in acceptRejectReporterList`);
+    }
+  }
+  next();
+});
+
 const Adpost = mongoose.model("Adpost", advertisementSchema);
 module.exports = Adpost;
