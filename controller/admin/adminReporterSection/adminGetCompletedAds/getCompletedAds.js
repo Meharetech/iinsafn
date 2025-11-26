@@ -268,7 +268,7 @@ async function adminRejectAdsProof(req, res) {
       { _id: adId, "acceptRejectReporterList.reporterId": reporterId },
       {
         $set: {
-          "acceptRejectReporterList.$.postStatus": "proof_rejected", // Set to proof_rejected status
+          "acceptRejectReporterList.$.postStatus": "accepted", // ✅ Set back to "accepted" so ad shows again for resubmission
           "acceptRejectReporterList.$.adProof": true, // Keep adProof as true (initial proof exists)
           "acceptRejectReporterList.$.rejectedAt": new Date(),
           "acceptRejectReporterList.$.rejectNote": adminNote || "Completion screenshot rejected by admin",

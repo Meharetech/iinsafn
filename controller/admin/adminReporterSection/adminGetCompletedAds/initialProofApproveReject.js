@@ -60,7 +60,8 @@ const adminApproveInitialProof = async (req, res) => {
       { _id: adId, "acceptRejectReporterList.reporterId": reporterId },
       {
         $set: {
-          "acceptRejectReporterList.$.postStatus": "approved", // ✅ Update to approved status
+          "acceptRejectReporterList.$.postStatus": "accepted", // ✅ Set to "accepted" so ad shows again for final proof submission
+          "acceptRejectReporterList.$.adProof": true, // ✅ Keep adProof as true (initial proof exists)
           "acceptRejectReporterList.$.initialProofApproved": true,
           "acceptRejectReporterList.$.initialProofApprovedAt": new Date(),
           "acceptRejectReporterList.$.initialProofApprovedBy": adminId,
