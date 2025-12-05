@@ -74,8 +74,8 @@ const submitComplitedAds = async (req, res) => {
         console.log("📺 YouTube views result:", currentViews);
       } else if (platform.toLowerCase() === "facebook") {
         console.log("📘 Fetching Facebook views for:", videoUrl);
-        const rawViews = await getFacebookViewCount(videoUrl);
-        currentViews = parseInt(rawViews.toString().replace(/[^\d]/g, ""), 10);
+        // Pass returnNumeric=true to get numeric value directly
+        currentViews = await getFacebookViewCount(videoUrl, 0, true);
         console.log("📘 Facebook views result:", currentViews);
       } else {
         console.error("❌ Unsupported platform:", platform);
