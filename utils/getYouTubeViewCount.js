@@ -18,9 +18,9 @@ const extractVideoId = (url) => {
 
 /**
  * Extract view count from YouTube video URL
- * Uses new Social Media Views API as primary method, falls back to YouTube API if available
+ * Uses YouTube API as primary method, falls back to Social Media Views API if available
  * @param {string} videoUrl - YouTube video URL
- * @param {string} apiKey - YouTube API key (optional, for fallback)
+ * @param {string} apiKey - YouTube API key (required for primary method)
  * @param {number} profile - Profile index for Social Media Views API (optional, defaults to 0)
  * @returns {Promise<number|null>} - View count as integer or null on error
  */
@@ -29,7 +29,36 @@ const getYouTubeViewCount = async (videoUrl, apiKey = null, profile = 0) => {
     console.log("🚀 Starting YouTube views extraction...");
     console.log(`📺 URL: ${videoUrl}`);
 
-    // ✅ Method 1: Try new Social Media Views API first
+    // ✅ Method 1: Try YouTube API first (primary method)
+    if (apiKey) {
+      try {
+        console.log("📡 Trying YouTube API...");
+        const videoId = extractVideoId(videoUrl);
+
+        if (!videoId) {
+          throw new Error("Invalid or unrecognized YouTube URL");
+        }
+
+        const youtubeApiUrl = `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoId}&key=${apiKey}`;
+        const response = await axios.get(youtubeApiUrl);
+
+        const items = response.data.items;
+        if (!items.length) {
+          throw new Error("Video not found");
+        }
+
+        const viewCount = parseInt(items[0].statistics.viewCount, 10);
+        console.log("✅ Fetched YouTube view count from YouTube API:", viewCount);
+        return viewCount;
+      } catch (youtubeApiError) {
+        console.warn("⚠️ YouTube API failed, trying fallback method...");
+        console.warn("⚠️ Error:", youtubeApiError.message);
+      }
+    } else {
+      console.warn("⚠️ No YouTube API key provided, trying fallback method...");
+    }
+
+    // ✅ Method 2: Fallback to Social Media Views API
     try {
       const apiBaseUrl = process.env.VIEWS_API_BASE_URL || 
                          (process.env.NODE_ENV === 'production' 
@@ -38,7 +67,7 @@ const getYouTubeViewCount = async (videoUrl, apiKey = null, profile = 0) => {
 
       const apiUrl = `${apiBaseUrl}/api/youtube/views`;
       
-      console.log("📡 Trying Social Media Views API...");
+      console.log("📡 Trying Social Media Views API as fallback...");
       const response = await axios.get(apiUrl, {
         params: {
           url: videoUrl,
@@ -58,34 +87,11 @@ const getYouTubeViewCount = async (videoUrl, apiKey = null, profile = 0) => {
         }
       }
     } catch (apiError) {
-      console.warn("⚠️ Social Media Views API failed, trying fallback method...");
+      console.warn("⚠️ Social Media Views API also failed");
       console.warn("⚠️ Error:", apiError.message);
     }
 
-    // ✅ Method 2: Fallback to YouTube API (if apiKey is provided)
-    if (apiKey) {
-      console.log("📡 Trying YouTube API as fallback...");
-      const videoId = extractVideoId(videoUrl);
-
-      if (!videoId) {
-        throw new Error("Invalid or unrecognized YouTube URL");
-      }
-
-      const youtubeApiUrl = `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoId}&key=${apiKey}`;
-      const response = await axios.get(youtubeApiUrl);
-
-      const items = response.data.items;
-      if (!items.length) {
-        throw new Error("Video not found");
-      }
-
-      const viewCount = parseInt(items[0].statistics.viewCount, 10);
-      console.log("✅ Fetched YouTube view count from YouTube API:", viewCount);
-      return viewCount;
-    } else {
-      console.warn("⚠️ No YouTube API key provided, cannot use fallback method");
-      return null;
-    }
+    return null;
 
   } catch (error) {
     console.error("❌ Error in getYouTubeViewCount:", error.message);
