@@ -11,6 +11,16 @@ const getAllAdvocates = async (req, res) => {
       .sort({ createdAt: -1 }) // Most recent first
       .limit(50); // Limit to 50 advocates for homepage
 
+    // If no verified advocates found, return success with empty array and message
+    if (advocates.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        count: 0,
+        message: "No verified advocates available at the moment. Check back soon!"
+      });
+    }
+
     // Map advocates to include rating (can be enhanced later with actual rating system)
     const advocatesWithRating = advocates.map(advocate => ({
       _id: advocate._id,
@@ -28,7 +38,8 @@ const getAllAdvocates = async (req, res) => {
     return res.json({
       success: true,
       data: advocatesWithRating,
-      count: advocatesWithRating.length
+      count: advocatesWithRating.length,
+      message: `Found ${advocatesWithRating.length} verified advocates`
     });
   } catch (err) {
     console.error("Get all advocates error:", err);

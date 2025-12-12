@@ -17,7 +17,8 @@ const checkVideosView = async (req, res) => {
         break;
 
       case 'facebook':
-        views = await getFacebookViewCount(videoUrl);
+        // Pass true for returnNumeric to get a number back (e.g. 1200 instead of "1.2K views")
+        views = await getFacebookViewCount(videoUrl, 0, true);
         break;
 
       default:
