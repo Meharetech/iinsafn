@@ -5,7 +5,8 @@ const getAllAdvocates = async (req, res) => {
   try {
     // Fetch only verified advocates with essential fields for public display
     const advocates = await AdvocateUser.find({
-      isVerified: true
+      isVerified: true,
+      accountStatus: "Approved"
     })
       .select("name profileImage state city specialization experience advocateId")
       .sort({ createdAt: -1 }) // Most recent first

@@ -97,9 +97,14 @@ const advocateUserSchema = new mongoose.Schema(
     emailOtp: {
       type: String,
     },
-    isVerified: { 
-      type: Boolean, 
-      default: false 
+    isVerified: {
+      type: Boolean,
+      default: false
+    },
+    accountStatus: {
+      type: String,
+      enum: ["Pending", "Approved", "Rejected"],
+      default: "Pending"
     },
     otpExpiry: {
       type: Date,

@@ -27,7 +27,7 @@ const loginUser = async (req, res) => {
 
     // ✅ Find user by email
     const user = await AdvocateUser.findOne({ email: emailLower });
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -40,6 +40,14 @@ const loginUser = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: "Advocate account not verified. Please verify your account before logging in.",
+      });
+    }
+
+    // ✅ Check admin approval
+    if (user.accountStatus !== "Approved") {
+      return res.status(403).json({
+        success: false,
+        message: `Your account status is ${user.accountStatus || 'Pending'}. Please wait for admin approval.`,
       });
     }
 

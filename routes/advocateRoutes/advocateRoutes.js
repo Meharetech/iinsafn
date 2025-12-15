@@ -8,9 +8,13 @@ const getProfile = require('../../controller/advocate/advocateProfile');
 const getWalletDetails = require('../../controller/advocate/advocateWallet');
 const getAllAdvocates = require('../../controller/advocate/getAllAdvocates');
 
+const getApprovedAdvocates = require('../../controller/advocate/getApprovedAdvocates');
+
 // Public Routes
 // Get all verified advocates for homepage display
+// Keeping old route for backward compatibility if needed, but new one is preferred
 router.get("/advocate/all", getAllAdvocates);
+router.get("/advocate/approved", getApprovedAdvocates);
 
 // Advocate Registration Routes
 router.post("/advocate/register", preRegisterUser);

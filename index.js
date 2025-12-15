@@ -8,7 +8,7 @@ const userRoutes = require('./routes/userRoutes/userRoutes')
 const advertiserRoutes = require("./routes/userAdvertiserRoutes/advertiserRoutes")
 const reporterRoutes = require("./routes/reporterRoutes/reporterFetchAds")
 const reporterAdminRoutes = require('./routes/adminRoutes/reporterAdmin/adminReporterRoutes')
-const adminAuth = require('./routes/adminRoutes/adminAuth/adminAuth') 
+const adminAuth = require('./routes/adminRoutes/adminAuth/adminAuth')
 const raiseYourVoiceRoutes = require("./routes/RaiseYourVoice/raiseYourVoiceRoutes")
 const adminRaiseYourVoice = require("./routes/adminRoutes/adminRaiseYourVoice/raiseYourVoiceStatus")
 const pressConferenceRoutes = require("./routes/pressConferenceRoutes/pressConferenceRoutes")
@@ -18,11 +18,12 @@ const podcastBookingRoutes = require("./routes/podcastRoutes/podcastBookingRoute
 const podcastStudioAdminRoutes = require("./routes/adminRoutes/podcastStudioAdminRoutes")
 const podcastBookingAdminRoutes = require("./routes/adminRoutes/podcastBookingAdminRoutes")
 const advocateRoutes = require("./routes/advocateRoutes/advocateRoutes")
+const advocateAdminRoutes = require("./routes/adminRoutes/advocateAdmin/advocateAdminRoutes")
 const path = require('path')
 const multerErrorHandler = require('./middlewares/multer/errorHandler')
 
 // Configure JSON parsing with increased limit
-app.use(express.json({ limit: '300mb' })); 
+app.use(express.json({ limit: '300mb' }));
 
 // Configure URL-encoded data parsing with increased limit
 app.use(express.urlencoded({ limit: '300mb', extended: true }));
@@ -37,15 +38,15 @@ app.use(cors({
 
 
 
-try{
+try {
     connectDB()
-    app.use('/upload', express.static(path.join(__dirname,'upload')))
-    app.use('/uploads', express.static(path.join(__dirname,'uploads')))
-    app.use('/images', express.static(path.join(__dirname,'images')))
+    app.use('/upload', express.static(path.join(__dirname, 'upload')))
+    app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
+    app.use('/images', express.static(path.join(__dirname, 'images')))
 
     // Apply multer error handler middleware
     app.use(multerErrorHandler)
-    
+
     // Root route to show server is running
     app.get('/', (req, res) => {
         res.json({
@@ -55,7 +56,7 @@ try{
             version: '1.0.0'
         });
     });
-    
+
     //Routes
     app.use(adsAdminRoute)
     app.use(userRoutes)
@@ -72,15 +73,15 @@ try{
     app.use('/admin', podcastStudioAdminRoutes)
     app.use('/admin', podcastBookingAdminRoutes)
     app.use(advocateRoutes)
+    app.use(advocateAdminRoutes)
 
 
     const PORT = process.env.PORT || 5005;
     app.listen(PORT, () => {
-      console.log(`Server running at http://localhost:${PORT}`);
+        console.log(`Server running at http://localhost:${PORT}`);
     });
 }
-catch(err)
-{
+catch (err) {
     console.error("Startup Error:", err)
 }
 

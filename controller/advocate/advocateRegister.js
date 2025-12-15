@@ -80,11 +80,11 @@ const generateUniqueAdvocateId = async () => {
 const sendOtpViaSMS = async (mobile, otp, userName) => {
   try {
     const apiKey = process.env.AISENSY_API_KEY;
-    
+
     if (!apiKey) {
       throw new Error("AISENSY_API_KEY is not configured");
     }
-    
+
     if (!mobile || !otp) {
       throw new Error("Mobile number and OTP are required");
     }
@@ -174,7 +174,7 @@ const sendOtpViaEmail = async (email, otp, userName) => {
     </body>
     </html>
   `;
-  
+
   await sendEmail(
     email,
     "Advocate Registration - OTP Verification",
@@ -186,7 +186,7 @@ const sendOtpViaEmail = async (email, otp, userName) => {
 const verifyOtp = async (req, res) => {
   try {
     const { email, phoneNo, emailOtp, whatsappotp } = req.body;
-    
+
     // Validate required fields
     if (!email || !phoneNo || !emailOtp || !whatsappotp) {
       return res.status(400).json({
@@ -226,9 +226,9 @@ const verifyOtp = async (req, res) => {
     });
 
     if (!isEmailOtpValid || !isMobileOtpValid || isOtpExpired) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "Invalid or expired OTP" 
+        message: "Invalid or expired OTP"
       });
     }
 
@@ -252,13 +252,15 @@ const verifyOtp = async (req, res) => {
       experience: userData.experience,
       barAssociationCourt: userData.barAssociationCourt,
       uniqueId: userData.uniqueId,
+      uniqueId: userData.uniqueId,
       isVerified: true,
+      accountStatus: "Pending",
       advocateId,
     });
 
     await user.save();
     console.log("✅ Advocate user saved:", user._id);
-    
+
     // Create wallet for the new advocate user with default balance 0
     try {
       const wallet = new Wallet({
@@ -267,14 +269,14 @@ const verifyOtp = async (req, res) => {
         balance: 0,
         transactions: []
       });
-      
+
       await wallet.save();
       console.log(`✅ Wallet created for advocate user: ${user._id} with balance: ₹0`);
     } catch (walletErr) {
       console.error("⚠️ Wallet creation error (continuing anyway):", walletErr);
       // Continue even if wallet creation fails
     }
-    
+
     pendingAdvocateRegistrations.delete(key);
 
     // Generate JWT token
@@ -313,7 +315,7 @@ const verifyOtp = async (req, res) => {
 
 const preRegisterUser = async (req, res) => {
   console.log("Advocate registration request received");
-  
+
   // Handle file upload first
   upload(req, res, async (uploadErr) => {
     if (uploadErr) {
@@ -344,7 +346,7 @@ const preRegisterUser = async (req, res) => {
 
     try {
       console.log("Starting Advocate registration validation...");
-      
+
       // ✅ Basic validations
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const mobileRegex = /^[6-9]\d{9}$/;
@@ -373,13 +375,13 @@ const preRegisterUser = async (req, res) => {
 
       // ✅ Check if user already exists
       console.log("Checking for existing Advocate user...");
-      const existingUser = await AdvocateUser.findOne({ 
+      const existingUser = await AdvocateUser.findOne({
         $or: [
-          { email: email.toLowerCase() }, 
-          { phoneNo } 
-        ] 
+          { email: email.toLowerCase() },
+          { phoneNo }
+        ]
       });
-      
+
       if (existingUser) {
         console.log("Existing user found:", existingUser.email);
         return res.status(400).json({
@@ -482,7 +484,7 @@ const preRegisterUser = async (req, res) => {
 
 const resendOtp = async (req, res) => {
   const { email, phoneNo } = req.body;
-  
+
   // Normalize email to lowercase for consistent key matching
   const emailLower = email ? email.toLowerCase().trim() : '';
   const key = `${emailLower}|${phoneNo}`;
@@ -525,11 +527,11 @@ const resendOtp = async (req, res) => {
   }
 };
 
-module.exports = { 
-  preRegisterUser, 
-  verifyOtp, 
-  sendOtpViaSMS, 
-  sendOtpViaEmail, 
-  resendOtp 
+module.exports = {
+  preRegisterUser,
+  verifyOtp,
+  sendOtpViaSMS,
+  sendOtpViaEmail,
+  resendOtp
 };
 

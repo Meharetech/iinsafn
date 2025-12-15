@@ -15,6 +15,9 @@ const {
   addChannelType,
   editChannelType,
   deleteChannelType,
+  // Platform Management
+  addPlatform,
+  deletePlatform
 } = require("../../../controller/admin/adminAdevertismentSection/adminSetAdPrice/adminSetAdPrice");
 const {
   adminGetAds,
@@ -27,7 +30,7 @@ const {
   getFullAdvertisementDetails,
 } = require("../../../controller/admin/adminAdevertismentSection/adminGetAllAds/adminGetAds");
 const freeAds = require("../../../controller/admin/freeAds/freeAds");
-const {freeAdsUpload} = require("../../../middlewares/multer/multer")
+const { freeAdsUpload } = require("../../../middlewares/multer/multer")
 
 const adminAuthenticate = require("../../../middlewares/adminAuthenticate/adminAuthenticate");
 const verifyAdminAccess = require("../../../middlewares/adminAuthenticate/verifyAdminAccess");
@@ -107,6 +110,21 @@ router.delete(
   deleteChannelType
 );
 
+// ==================== PLATFORM MANAGEMENT ROUTES ====================
+router.post(
+  "/admin/platform/add",
+  adminAuthenticate,
+  isSuperAdmin,
+  addPlatform
+);
+
+router.delete(
+  "/admin/platform/delete/:name",
+  adminAuthenticate,
+  isSuperAdmin,
+  deletePlatform
+);
+
 // Apply both middlewares per route
 router.get(
   "/admin/get/all/ads",
@@ -118,7 +136,7 @@ router.get(
 router.get(
   "/ads/accepted/by/reporters",
   adminAuthenticate,
-  verifyAdminAccess("advertisement"), 
+  verifyAdminAccess("advertisement"),
   getAllAdsWithAcceptedReporters
 );
 
