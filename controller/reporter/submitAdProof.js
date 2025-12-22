@@ -7,7 +7,7 @@ const fs = require("fs");
 const submitAdProof = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const reporterId = req.user._id;
     const reporterIinsafId = req.user.iinsafId;
@@ -33,7 +33,7 @@ const submitAdProof = async (req, res) => {
       const cloudinaryResult = await uploadToCloudinary(screenshotFile.path);
       screenshotUrl = cloudinaryResult.secure_url;
       console.log("Screenshot uploaded successfully:", screenshotUrl);
-      
+
       // ✅ Delete local file after successful upload
       if (fs.existsSync(screenshotFile.path)) {
         fs.unlinkSync(screenshotFile.path);
@@ -66,13 +66,13 @@ const submitAdProof = async (req, res) => {
         message: "You are not authorized to submit proof for this ad. Please accept the ad first.",
       });
     }
-    
+
     // ✅ Check if this is a resubmission after initial proof rejection
     const existingProofDoc = await reporterAdProof.findOne({ adId }).session(session);
     const existingProof = existingProofDoc?.proofs?.find(
       (p) => p.reporterId.toString() === reporterId.toString()
     );
-    
+
     // If proof exists and status is "rejected", this is a resubmission of initial proof
     // Allow it only if initial proof was rejected (not final proof rejection)
     if (existingProof && existingProof.status === "rejected") {
@@ -89,35 +89,35 @@ const submitAdProof = async (req, res) => {
       console.log("✅ Allowing resubmission of initial proof after rejection");
     }
 
-    // ✅ Check 14-hour expiry from acceptedAt
-    const acceptedAt = new Date(reporterEntry.acceptedAt);
-    const now = new Date();
-    const diffInMs = now - acceptedAt;
-    const fourteenHoursInMs = 14 * 60 * 60 * 1000;
+    // ✅ Check 14-hour expiry from acceptedAt - REMOVED (User can submit anytime)
+    // const acceptedAt = new Date(reporterEntry.acceptedAt);
+    // const now = new Date();
+    // const diffInMs = now - acceptedAt;
+    // const fourteenHoursInMs = 14 * 60 * 60 * 1000;
 
-    if (diffInMs > fourteenHoursInMs) {
-      // ❌ Reject due to delay
-      await Adpost.updateOne(
-        { _id: adId, "acceptRejectReporterList.reporterId": reporterId },
-        {
-          $set: {
-            "acceptRejectReporterList.$.postStatus": "rejected",
-            "acceptRejectReporterList.$.accepted": false,
-            "acceptRejectReporterList.$.adProof": false,
-            "acceptRejectReporterList.$.rejectNote":
-              "Ad rejected for you because of uploading after expiry time",
-            "acceptRejectReporterList.$.iinsafId": reporterIinsafId,
-          },
-        },
-        { session }
-      );
+    // if (diffInMs > fourteenHoursInMs) {
+    //   // ❌ Reject due to delay
+    //   await Adpost.updateOne(
+    //     { _id: adId, "acceptRejectReporterList.reporterId": reporterId },
+    //     {
+    //       $set: {
+    //         "acceptRejectReporterList.$.postStatus": "rejected",
+    //         "acceptRejectReporterList.$.accepted": false,
+    //         "acceptRejectReporterList.$.adProof": false,
+    //         "acceptRejectReporterList.$.rejectNote":
+    //           "Ad rejected for you because of uploading after expiry time",
+    //         "acceptRejectReporterList.$.iinsafId": reporterIinsafId,
+    //       },
+    //     },
+    //     { session }
+    //   );
 
-      await session.commitTransaction();
-      return res.status(403).json({
-        message:
-          "Ad rejected: You tried to upload proof after the 14-hour expiry time.",
-      });
-    }
+    //   await session.commitTransaction();
+    //   return res.status(403).json({
+    //     message:
+    //       "Ad rejected: You tried to upload proof after the 14-hour expiry time.",
+    //   });
+    // }
 
     // ✅ Add proof if within time
     const newProof = {
@@ -149,7 +149,7 @@ const submitAdProof = async (req, res) => {
       const existingProofIndex = adProofDoc.proofs.findIndex(
         (proof) => proof.reporterId.toString() === reporterId.toString()
       );
-      
+
       if (existingProofIndex !== -1) {
         // Update existing proof (for resubmission after rejection)
         // Clear rejection fields when resubmitting initial proof
@@ -174,7 +174,7 @@ const submitAdProof = async (req, res) => {
         // Add new proof
         adProofDoc.proofs.push(newProof);
       }
-      
+
       // ✅ Ensure runningAdStatus is set to running
       adProofDoc.runningAdStatus = "running";
     }
@@ -285,8 +285,8 @@ const reporterGetRunningAds = async (req, res) => {
     // 2. Filter proofs to include only the current reporter's entry (pending, submitted, or rejected)
     const filteredAds = runningAds.map((doc) => {
       const reporterProof = doc.proofs.find(
-        (proof) => proof.reporterId.toString() === reporterId.toString() && 
-                  ["pending", "approved", "submitted", "rejected"].includes(proof.status)
+        (proof) => proof.reporterId.toString() === reporterId.toString() &&
+          ["pending", "approved", "submitted", "rejected"].includes(proof.status)
       );
 
       return {

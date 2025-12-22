@@ -24,7 +24,7 @@ const adminGetAds = async (req, res) => {
     const ads = await Adpost.find()
       .populate('owner', 'name email organization mobile iinsafId role') // Populate owner with user details
       .sort({ createdAt: -1 }); // optional: latest ads first
-    
+
     // ✅ Convert to plain objects and ensure platforms field is included
     const adsWithPlatforms = ads.map(ad => {
       const adObj = ad.toObject ? ad.toObject() : ad;
@@ -33,7 +33,7 @@ const adminGetAds = async (req, res) => {
         platforms: adObj.platforms || [], // Ensure platforms is always an array, even if undefined
       };
     });
-    
+
     // Log platforms data for debugging
     console.log(`📊 Fetched ${adsWithPlatforms.length} advertisements with owner details`);
     adsWithPlatforms.forEach((ad, index) => {
@@ -41,7 +41,7 @@ const adminGetAds = async (req, res) => {
         console.log(`📋 Ad ${index + 1} (${ad._id}): platforms =`, ad.platforms, "Type:", Array.isArray(ad.platforms));
       }
     });
-    
+
     res.status(200).json(adsWithPlatforms);
   } catch (error) {
     console.error("Error fetching ads:", error);
@@ -56,9 +56,9 @@ const downloadFile = async (fileUrl, outputLocationPath) => {
   try {
     console.log(`📥 Downloading file from: ${fileUrl}`);
     console.log(`💾 Saving to: ${outputLocationPath}`);
-    
+
     const writer = fs.createWriteStream(outputLocationPath);
-    
+
     const response = await axios({
       url: fileUrl,
       method: "GET",
@@ -94,10 +94,10 @@ const downloadFile = async (fileUrl, outputLocationPath) => {
 const processNotificationsInBackground = async (ad) => {
   try {
     console.log(`🚀 Starting background notification process for ad: ${ad._id}`);
-    
+
     // Notify reporters
     await notifyMatchingReporters(ad);
-    
+
     // Notify advertiser
     const advertiser = await User.findById(ad.owner);
     if (advertiser) {
@@ -114,7 +114,7 @@ const processNotificationsInBackground = async (ad) => {
         [advertiser.name, ad.adType]
       );
     }
-    
+
     console.log(`✅ Background notifications completed for ad: ${ad._id}`);
   } catch (error) {
     console.error(`❌ Background notification error for ad ${ad._id}:`, error);
@@ -125,13 +125,13 @@ const processNotificationsInBackground = async (ad) => {
 const approvedAds = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const adId = req.params.id;
     const ad = await Adpost.findById(adId)
       .populate('owner', 'name email organization mobile iinsafId role')
       .session(session);
-      
+
     if (!ad) {
       await session.abortTransaction();
       return res
@@ -169,19 +169,19 @@ const approvedAds = async (req, res) => {
         console.log(`🖼️ Processing image watermark for ad ${adId}: ${ad.imageUrl}`);
         const tempImagePath = path.join(tempFolder, `${Date.now()}_image.png`);
         await downloadFile(ad.imageUrl, tempImagePath);
-        
+
         const watermarkedImage = await applyWatermark(tempImagePath, "image", {
           maxWidth: 1920,
           maxHeight: 1080,
           quality: 85,
-          cropToFit: true
+          cropToFit: false
         });
-        
+
         const uploadImage = await uploadToCloudinary(
           watermarkedImage,
           "ads/images"
         );
-        
+
         if (uploadImage && uploadImage.secure_url) {
           updatedImageUrl = uploadImage.secure_url;
           console.log(`✅ Image watermarked and uploaded successfully: ${updatedImageUrl}`);
@@ -190,8 +190,8 @@ const approvedAds = async (req, res) => {
         }
 
         // Delete temp files safely
-        await fsp.unlink(tempImagePath).catch(() => {});
-        await fsp.unlink(watermarkedImage).catch(() => {});
+        await fsp.unlink(tempImagePath).catch(() => { });
+        await fsp.unlink(watermarkedImage).catch(() => { });
       } catch (imageError) {
         console.error(`❌ Image watermark processing failed for ad ${adId}:`, imageError);
         watermarkErrors.push(`Image watermark failed: ${imageError.message}`);
@@ -206,14 +206,14 @@ const approvedAds = async (req, res) => {
         console.log(`🎥 Processing video watermark for ad ${adId}: ${ad.videoUrl}`);
         const tempVideoPath = path.join(tempFolder, `${Date.now()}_video.mp4`);
         await downloadFile(ad.videoUrl, tempVideoPath);
-        
+
         const watermarkedVideo = await applyWatermark(tempVideoPath, "video");
-        
+
         const uploadVideo = await uploadToCloudinary(
           watermarkedVideo,
           "ads/videos"
         );
-        
+
         if (uploadVideo && uploadVideo.secure_url) {
           updatedVideoUrl = uploadVideo.secure_url;
           console.log(`✅ Video watermarked and uploaded successfully: ${updatedVideoUrl}`);
@@ -221,8 +221,8 @@ const approvedAds = async (req, res) => {
           throw new Error("Video upload to Cloudinary failed - no secure_url returned");
         }
 
-        await fsp.unlink(tempVideoPath).catch(() => {});
-        await fsp.unlink(watermarkedVideo).catch(() => {});
+        await fsp.unlink(tempVideoPath).catch(() => { });
+        await fsp.unlink(watermarkedVideo).catch(() => { });
       } catch (videoError) {
         console.error(`❌ Video watermark processing failed for ad ${adId}:`, videoError);
         watermarkErrors.push(`Video watermark failed: ${videoError.message}`);
@@ -234,8 +234,8 @@ const approvedAds = async (req, res) => {
     // ✅ If watermark processing failed, return error to admin
     if (watermarkErrors.length > 0) {
       await session.abortTransaction();
-      return res.status(500).json({ 
-        success: false, 
+      return res.status(500).json({
+        success: false,
         message: "Failed to apply watermark to advertisement media. Please try again or contact support.",
         errors: watermarkErrors,
         details: watermarkErrors.join("; ")
@@ -245,21 +245,21 @@ const approvedAds = async (req, res) => {
     // ✅ Save actually targeted reporters before updating ad
     if (!ad.reporterId || ad.reporterId.length === 0) {
       console.log(`🔍 Finding actually targeted reporters for ad ${ad._id}`);
-      
+
       // Find reporters based on ad's targeting configuration
       let targetReporters = [];
-      
+
       if (ad.adminSelectState && ad.adminSelectState.length > 0) {
         const query = {
           role: "Reporter",
           verifiedReporter: true,
           state: { $in: ad.adminSelectState }
         };
-        
+
         if (ad.adminSelectCities && ad.adminSelectCities.length > 0) {
           query.city = { $in: ad.adminSelectCities };
         }
-        
+
         targetReporters = await User.find(query).select("_id").session(session);
         console.log(`🎯 Found ${targetReporters.length} reporters in admin selected states/cities`);
       } else if (ad.adminSelectCities && ad.adminSelectCities.length > 0) {
@@ -288,7 +288,7 @@ const approvedAds = async (req, res) => {
           console.log(`📍 No location targeting specified, found ${targetReporters.length} all verified reporters`);
         }
       }
-      
+
       // Save the actually targeted user IDs
       ad.reporterId = targetReporters.map(user => user._id);
       console.log(`💾 Saved ${targetReporters.length} actually targeted reporters for ad ${ad._id}:`, targetReporters.map(u => u._id));
@@ -325,11 +325,11 @@ const approvedAds = async (req, res) => {
     // ✅ PROCESS NOTIFICATIONS ASYNCHRONOUSLY (Don't await)
     console.log(`🚀 Starting background notification process for ad: ${ad._id}`);
     processNotificationsInBackground(ad);
-    
+
   } catch (err) {
     await session.abortTransaction();
     console.error("Error approving ad:", err);
-    
+
     // Provide detailed error message to admin
     let errorMessage = "Failed to approve advertisement";
     if (err.message) {
@@ -337,9 +337,9 @@ const approvedAds = async (req, res) => {
     } else if (err.toString) {
       errorMessage = err.toString();
     }
-    
-    res.status(500).json({ 
-      success: false, 
+
+    res.status(500).json({
+      success: false,
       message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
@@ -353,7 +353,7 @@ const approvedAds = async (req, res) => {
 const adminModifyAds = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const { adId } = req.params;
     const {
@@ -368,7 +368,7 @@ const adminModifyAds = async (req, res) => {
     const ad = await Adpost.findById(adId)
       .populate('owner', 'name email organization mobile iinsafId role')
       .session(session);
-      
+
     if (!ad) {
       await session.abortTransaction();
       return res
@@ -407,19 +407,19 @@ const adminModifyAds = async (req, res) => {
         console.log(`🖼️ Processing image watermark for ad ${adId}: ${ad.imageUrl}`);
         const tempImagePath = path.join(tempFolder, `${Date.now()}_image.png`);
         await downloadFile(ad.imageUrl, tempImagePath);
-        
+
         const watermarkedImage = await applyWatermark(tempImagePath, "image", {
           maxWidth: 1920,
           maxHeight: 1080,
           quality: 85,
-          cropToFit: true
+          cropToFit: false
         });
-        
+
         const uploadImage = await uploadToCloudinary(
           watermarkedImage,
           "ads/images"
         );
-        
+
         if (uploadImage && uploadImage.secure_url) {
           updatedImageUrl = uploadImage.secure_url;
           console.log(`✅ Image watermarked and uploaded successfully: ${updatedImageUrl}`);
@@ -428,8 +428,8 @@ const adminModifyAds = async (req, res) => {
         }
 
         // Clean up temp files
-        await fsp.unlink(tempImagePath).catch(() => {});
-        await fsp.unlink(watermarkedImage).catch(() => {});
+        await fsp.unlink(tempImagePath).catch(() => { });
+        await fsp.unlink(watermarkedImage).catch(() => { });
       } catch (imageError) {
         console.error(`❌ Image watermark processing failed for ad ${adId}:`, imageError);
         watermarkErrors.push(`Image watermark failed: ${imageError.message}`);
@@ -443,14 +443,14 @@ const adminModifyAds = async (req, res) => {
         console.log(`🎥 Processing video watermark for ad ${adId}: ${ad.videoUrl}`);
         const tempVideoPath = path.join(tempFolder, `${Date.now()}_video.mp4`);
         await downloadFile(ad.videoUrl, tempVideoPath);
-        
+
         const watermarkedVideo = await applyWatermark(tempVideoPath, "video");
-        
+
         const uploadVideo = await uploadToCloudinary(
           watermarkedVideo,
           "ads/videos"
         );
-        
+
         if (uploadVideo && uploadVideo.secure_url) {
           updatedVideoUrl = uploadVideo.secure_url;
           console.log(`✅ Video watermarked and uploaded successfully: ${updatedVideoUrl}`);
@@ -459,8 +459,8 @@ const adminModifyAds = async (req, res) => {
         }
 
         // Clean up temp files
-        await fsp.unlink(tempVideoPath).catch(() => {});
-        await fsp.unlink(watermarkedVideo).catch(() => {});
+        await fsp.unlink(tempVideoPath).catch(() => { });
+        await fsp.unlink(watermarkedVideo).catch(() => { });
       } catch (videoError) {
         console.error(`❌ Video watermark processing failed for ad ${adId}:`, videoError);
         watermarkErrors.push(`Video watermark failed: ${videoError.message}`);
@@ -472,8 +472,8 @@ const adminModifyAds = async (req, res) => {
     // ✅ If watermark processing failed, return error to admin
     if (watermarkErrors.length > 0) {
       await session.abortTransaction();
-      return res.status(500).json({ 
-        success: false, 
+      return res.status(500).json({
+        success: false,
         message: "Failed to apply watermark to advertisement media. Please try again or contact support.",
         errors: watermarkErrors,
         details: watermarkErrors.join("; ")
@@ -482,7 +482,7 @@ const adminModifyAds = async (req, res) => {
 
     // ✅ Update ad fields - PRESERVE existing targeting and ADD new targeting
     console.log(`🔄 MODIFYING Advertisement ${ad._id} - preserving all existing data`);
-    
+
     // Handle states - combine existing with new
     if (adminSelectState && adminSelectState.length > 0) {
       const existingStates = ad.adminSelectState || [];
@@ -494,7 +494,7 @@ const adminModifyAds = async (req, res) => {
         combined: allStates
       });
     }
-    
+
     // Handle cities - combine existing with new
     if (adminSelectCities && adminSelectCities.length > 0) {
       const existingCities = ad.adminSelectCities || [];
@@ -506,13 +506,13 @@ const adminModifyAds = async (req, res) => {
         combined: allCities
       });
     }
-    
+
     // Handle pincode - use new if provided
     if (adminSelectPincode) {
       ad.adminSelectPincode = adminSelectPincode;
       console.log(`Advertisement ${ad._id} modified with pincode:`, adminSelectPincode);
     }
-    
+
     // Handle reporters - combine existing with new
     if (reporterId && reporterId.length > 0) {
       const existingReporters = ad.reporterId || [];
@@ -524,7 +524,7 @@ const adminModifyAds = async (req, res) => {
         combined: allReporters
       });
     }
-    
+
     // Handle other fields
     if (allStates !== undefined) {
       ad.allStates = allStates;
@@ -535,7 +535,7 @@ const adminModifyAds = async (req, res) => {
     ad.acceptBefore = acceptBefore;
     ad.imageUrl = updatedImageUrl;
     ad.videoUrl = updatedVideoUrl;
-    
+
     // Log final targeting configuration
     console.log(`🎯 Final targeting configuration for ${ad._id}:`, {
       adminSelectState: ad.adminSelectState,
@@ -544,7 +544,7 @@ const adminModifyAds = async (req, res) => {
       preferenceState: ad.pfState,
       preferenceCities: ad.pfCities
     });
-    
+
     // ✅ PRESERVE ALL EXISTING USER STATUSES - NO RESETTING
     // When modifying an advertisement, we only update targeting and add new users
     // Existing users keep their current status (pending, accepted, submitted, completed, etc.)
@@ -556,7 +556,7 @@ const adminModifyAds = async (req, res) => {
         accepted: r.accepted,
         adProof: r.adProof
       })));
-      
+
       // ✅ Clean up invalid postStatus values before saving
       // Replace "approved" with "accepted" (closest valid value)
       const validStatuses = ["pending", "accepted", "submitted", "completed", "rejected", "proof_submitted", "proof_rejected"];
@@ -567,7 +567,7 @@ const adminModifyAds = async (req, res) => {
         }
       });
     }
-    
+
     // Note: updatedAt will be automatically set by mongoose timestamps
 
     await ad.save({ session });
@@ -684,10 +684,8 @@ const rejectedAds = async (req, res) => {
         await sendEmail(
           advertiser.email,
           "❌ Your Ad was Rejected",
-          `Hello ${advertiser.name}, unfortunately your advertisement "${
-            ad.adType
-          }" was rejected.\nReason: ${
-            ad.adminRejectNote || "Not specified"
+          `Hello ${advertiser.name}, unfortunately your advertisement "${ad.adType
+          }" was rejected.\nReason: ${ad.adminRejectNote || "Not specified"
           }.\nRefund ID: ${refundId}\nA refund of ₹${refundAmount} has been credited to your wallet.`
         );
       }
@@ -765,7 +763,7 @@ const rejectedAds = async (req, res) => {
 const adminGetRunningAds = async (req, res) => {
   try {
     console.log("📊 Fetching admin running ads with ALL proof statuses");
-    
+
     const runningAds = await reporterAdProof
       .find({ runningAdStatus: "running" })
       .populate({
@@ -782,7 +780,7 @@ const adminGetRunningAds = async (req, res) => {
     }
 
     console.log(`✅ Found ${runningAds.length} running ads`);
-    
+
     // Log proof statuses for debugging
     runningAds.forEach((ad, index) => {
       console.log(`📋 Ad ${index + 1} (${ad.adId?._id || ad.adId}):`, {
@@ -869,44 +867,44 @@ const getAdvertisementTargetedReporters = async (req, res) => {
 
     // Get reporter responses from acceptRejectReporterList
     const reporterResponses = advertisement.acceptRejectReporterList || [];
-    
+
     // Get proof submissions from ReporterAdProof model
     const ReporterAdProof = require("../../../../models/reporterAdProof/reporterAdProof");
     const adProof = await ReporterAdProof.findOne({ adId: advertisement._id });
-    
+
     console.log(`📊 Found ${reporterResponses.length} reporter responses in acceptRejectReporterList`);
-    console.log(`📊 Reporter responses details:`, reporterResponses.map(r => ({ 
-      reporterId: r.reporterId, 
-      iinsafId: r.iinsafId, 
-      accepted: r.accepted, 
-      acceptedAt: r.acceptedAt, 
+    console.log(`📊 Reporter responses details:`, reporterResponses.map(r => ({
+      reporterId: r.reporterId,
+      iinsafId: r.iinsafId,
+      accepted: r.accepted,
+      acceptedAt: r.acceptedAt,
       rejectedAt: r.rejectedAt,
-      rejectNote: r.rejectNote 
+      rejectNote: r.rejectNote
     })));
     console.log(`📊 Found ${adProof ? adProof.proofs.length : 0} proof submissions`);
 
     // Show ONLY users who were actually targeted (from reporterId array)
     const User = require("../../../../models/userModel/userModel");
-    
+
     console.log(`📋 Showing ONLY users who were actually targeted (from reporterId array)`);
-    
+
     // Get user IDs from reporterId array (these are users who were actually targeted)
     const targetedUserIds = advertisement.reporterId || [];
     console.log(`📋 Found ${targetedUserIds.length} users who were actually targeted:`, targetedUserIds);
-    
+
     // Use ONLY reporterId array - no fallback
     const finalUserIds = targetedUserIds;
-    
+
     console.log(`📋 Using ${finalUserIds.length} user IDs for display:`, finalUserIds);
-    
+
     // Fetch user details for targeted users
     const targetUsers = await User.find({
       _id: { $in: finalUserIds }
     }).select("name email mobile iinsafId state city role");
-    
+
     console.log(`✅ Final target users count (only notified users): ${targetUsers.length}`);
     console.log(`✅ Target users:`, targetUsers.map(u => ({ name: u.name, role: u.role, id: u._id })));
-    
+
     // Create a map of responses by user ID from advertisement data
     const responseMap = new Map();
     reporterResponses.forEach(reporter => {
@@ -925,7 +923,7 @@ const getAdvertisementTargetedReporters = async (req, res) => {
         });
       }
     });
-    
+
     // Add default "pending" status for users who haven't responded yet
     finalUserIds.forEach(userId => {
       if (!responseMap.has(userId.toString())) {
@@ -943,9 +941,9 @@ const getAdvertisementTargetedReporters = async (req, res) => {
         });
       }
     });
-    
+
     console.log(`📊 Response map created with ${responseMap.size} responses:`, Array.from(responseMap.entries()).map(([id, response]) => ({ id, postStatus: response.postStatus, accepted: response.accepted, rejected: response.rejected })));
-    
+
     // Create a map of proofs by user ID
     const proofMap = new Map();
     if (adProof && adProof.proofs) {
@@ -958,12 +956,12 @@ const getAdvertisementTargetedReporters = async (req, res) => {
         }
       });
     }
-    
+
     // Process all targeted users
     const processedUsers = targetUsers.map(user => {
       const response = responseMap.get(user._id.toString());
       const proof = proofMap.get(user._id.toString());
-      
+
       let status = "pending";
       if (response) {
         // ✅ Use postStatus instead of accepted/rejected flags
@@ -977,7 +975,7 @@ const getAdvertisementTargetedReporters = async (req, res) => {
           status = "completed";
         }
       }
-      
+
       console.log(`📊 Processing user ${user.name} (${user._id}):`, {
         hasResponse: !!response,
         postStatus: response?.postStatus,
@@ -986,7 +984,7 @@ const getAdvertisementTargetedReporters = async (req, res) => {
         hasProof: !!proof,
         finalStatus: status
       });
-      
+
       return {
         userId: user._id,
         userName: user.name,
@@ -1005,11 +1003,11 @@ const getAdvertisementTargetedReporters = async (req, res) => {
         userRole: response ? response.userRole : null
       };
     });
-    
+
     // Separate reporters and influencers
     const reporters = processedUsers.filter(u => u.userType === "Reporter");
     const influencers = processedUsers.filter(u => u.userType === "Influencer");
-    
+
     // Calculate statistics (only for users who were actually notified)
     const stats = {
       totalTargetedReporters: reporters.length,
@@ -1021,7 +1019,7 @@ const getAdvertisementTargetedReporters = async (req, res) => {
       rejected: processedUsers.filter(u => u.status === "rejected").length,
       completed: processedUsers.filter(u => u.status === "completed").length
     };
-    
+
     console.log(`📊 Final statistics (notified users only):`, stats);
 
     const response = {
@@ -1074,7 +1072,7 @@ const getFullAdvertisementDetails = async (req, res) => {
     }
 
     console.log(`✅ Found advertisement: ${advertisement._id}`);
-    
+
     res.status(200).json({
       success: true,
       data: advertisement
