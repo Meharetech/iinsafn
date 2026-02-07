@@ -193,7 +193,7 @@ const postAdd = async (req, res) => {
     // FormData sends arrays as platforms[0], platforms[1], etc.
     // Express/multer might parse this in different ways, so we need to check all possibilities
     let platformsArray = [];
-    
+
     // Method 1: Check if platforms is already an array
     if (body.platforms && Array.isArray(body.platforms)) {
       platformsArray = body.platforms.filter(p => p && typeof p === 'string' && p.trim() !== '');
@@ -218,10 +218,10 @@ const postAdd = async (req, res) => {
     }
     // Method 4: Check for bracket notation in all body keys (platforms[0], platforms[1], etc.)
     else {
-      const platformKeys = Object.keys(body).filter(key => 
+      const platformKeys = Object.keys(body).filter(key =>
         key.startsWith('platforms[') && key.endsWith(']')
       );
-      
+
       if (platformKeys.length > 0) {
         platformsArray = platformKeys
           .map(key => {
@@ -234,10 +234,10 @@ const postAdd = async (req, res) => {
         console.log("✅ Platforms parsed from bracket notation:", platformsArray);
       }
     }
-    
+
     // Set platforms in body
     body.platforms = platformsArray;
-    
+
     console.log("🔍 Debug - Final platforms array:", platformsArray, "Length:", platformsArray.length);
     console.log("🔍 Debug - All body keys:", Object.keys(body).filter(k => k.includes('platform')));
 
@@ -267,18 +267,18 @@ const postAdd = async (req, res) => {
 
     // ✅ Validate userType
     console.log("🔍 Debug - userType received:", body.userType, "Type:", typeof body.userType);
-    
+
     // Handle case where userType might be an array (take first value)
     let userTypeValue = body.userType;
     if (Array.isArray(body.userType)) {
       userTypeValue = body.userType[0];
       console.log("🔍 Debug - userType was array, taking first value:", userTypeValue);
     }
-    
+
     // Normalize userType (trim whitespace and convert to lowercase)
     const normalizedUserType = userTypeValue?.toString()?.trim()?.toLowerCase();
     console.log("🔍 Debug - normalized userType:", normalizedUserType);
-    
+
     if (!["reporter", "influencer"].includes(normalizedUserType)) {
       return res.status(400).json({
         success: false,
@@ -288,7 +288,7 @@ const postAdd = async (req, res) => {
         type: typeof body.userType
       });
     }
-    
+
     // Update body.userType with normalized value
     body.userType = normalizedUserType;
 
@@ -331,10 +331,10 @@ const postAdd = async (req, res) => {
     const totalCost = parseFloat(body.totalCost);
     const requiredViews = parseInt(body.requiredViews);
     const baseView = pricing.baseView || 1000; // Default to 1000 if not set
-    
+
     // ✅ Calculate requiredReporter based on requiredViews and baseView
     const requiredReporter = Math.ceil(requiredViews / baseView);
-    
+
     console.log("📊 View Distribution Calculation:", {
       requiredViews,
       baseView,
@@ -358,15 +358,15 @@ const postAdd = async (req, res) => {
     // ✅ Prepare ad data - exclude adState and adCity if they're empty or not provided
     // Users provide pfState and pfCities (preference), not adState/adCity
     const adData = { ...body };
-    
+
     // Remove adState and adCity if they're empty strings, undefined, or not provided
     // These fields are optional and not needed when using preference area (pfState/pfCities)
-    if (adData.adState === undefined || adData.adState === null || 
-        (typeof adData.adState === 'string' && adData.adState.trim() === '')) {
+    if (adData.adState === undefined || adData.adState === null ||
+      (typeof adData.adState === 'string' && adData.adState.trim() === '')) {
       delete adData.adState;
     }
-    if (adData.adCity === undefined || adData.adCity === null || 
-        (typeof adData.adCity === 'string' && adData.adCity.trim() === '')) {
+    if (adData.adCity === undefined || adData.adCity === null ||
+      (typeof adData.adCity === 'string' && adData.adCity.trim() === '')) {
       delete adData.adCity;
     }
 
@@ -375,7 +375,7 @@ const postAdd = async (req, res) => {
     // But ensure it's definitely an array
     const finalPlatforms = (body.platforms && Array.isArray(body.platforms)) ? body.platforms : [];
     adData.platforms = finalPlatforms;
-    
+
     console.log("🔍 Debug - platforms in adData before save:", adData.platforms, "Length:", adData.platforms.length);
     console.log("🔍 Debug - body.platforms:", body.platforms, "Type:", Array.isArray(body.platforms));
 
@@ -392,11 +392,11 @@ const postAdd = async (req, res) => {
       requiredReporter: requiredReporter, // ✅ Store calculated requiredReporter
       platforms: finalPlatforms, // ✅ Explicitly set platforms from parsed array
     });
-    
+
     console.log("🔍 Debug - platforms in newAd after creation:", newAd.platforms, "Length:", newAd.platforms ? newAd.platforms.length : 0);
-    
+
     await newAd.save();
-    
+
     // ✅ Verify platforms were saved correctly
     const savedAd = await Adpost.findById(newAd._id);
     console.log("🔍 Debug - platforms after save (from DB):", savedAd.platforms, "Length:", savedAd.platforms ? savedAd.platforms.length : 0);
@@ -434,7 +434,7 @@ const postAdd = async (req, res) => {
       await Coupon.updateOne({ _id: coupon._id }, { $inc: { usedCount: 1 } });
     }
 
-      // ✅ Send Notification Emails to Superadmin & Subadmins
+    // ✅ Send Notification Emails to Superadmin & Subadmins
     const superAdmins = await admins.find({ role: "superadmin" });
     const subAdmins = await admins.find({
       role: "subadmin",

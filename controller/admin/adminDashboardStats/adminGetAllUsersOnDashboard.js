@@ -1,6 +1,8 @@
 const User = require("../../../models/userModel/userModel");
 const RyvUsers = require("../../../models/userModel/RaiseYourVoiceModel/raiseYourVoiceUsers");
 const GenrateIdCard = require("../../../models/reporterIdGenrate/genrateIdCard");
+const Wallet = require("../../../models/Wallet/walletSchema");
+
 
 // ✅ 1. Get Raise Your Voice users
 const getRaiseYourVoiceUsers = async (req, res) => {
@@ -32,23 +34,31 @@ const getTotalUsers = async (req, res) => {
     // Fetch all users
     const users = await User.find();
 
-    // Enrich each user with iinsafId if they are a reporter
+    // Enrich each user with iinsafId and walletBalance
     const usersWithIinsafId = await Promise.all(
       users.map(async (user) => {
-        if (user.role === "Reporter") {
-          const idCard = await GenrateIdCard.findOne(
-            { reporter: user._id },
-            "iinsafId status"
-          ); // only fetch iinsafId + status
-          return {
-            ...user.toObject(),
-            iinsafId: idCard ? idCard.iinsafId : null,
-            idCardStatus: idCard ? idCard.status : "Not Applied",
-          };
-        }
-        return user.toObject();
+        // Fetch wallet balance
+        const wallet = await Wallet.findOne({ userId: user._id });
+        const walletBalance = wallet ? wallet.balance : 0;
+
+        // Fetch ID card info if it exists (Reporters, Influencers, etc.)
+        const idCard = await GenrateIdCard.findOne(
+          { reporter: user._id },
+          "iinsafId status image"
+        );
+
+        let enrichedUser = {
+          ...user.toObject(),
+          walletBalance,
+          iinsafId: idCard ? idCard.iinsafId : user.iinsafId,
+          idCardStatus: idCard ? idCard.status : "Not Applied",
+          profileImage: idCard ? idCard.image : null
+        };
+
+        return enrichedUser;
       })
     );
+
 
     res.status(200).json({
       count: usersWithIinsafId.length,
@@ -66,7 +76,18 @@ const getTotalUsers = async (req, res) => {
 const getTotalAdvertisers = async (req, res) => {
   try {
     const advertisers = await User.find({ role: "Advertiser" });
-    res.status(200).json({ count: advertisers.length, advertisers });
+
+    const enrichedAdvertisers = await Promise.all(
+      advertisers.map(async (user) => {
+        const wallet = await Wallet.findOne({ userId: user._id });
+        return {
+          ...user.toObject(),
+          walletBalance: wallet ? wallet.balance : 0
+        };
+      })
+    );
+
+    res.status(200).json({ count: enrichedAdvertisers.length, advertisers: enrichedAdvertisers });
   } catch (err) {
     res
       .status(500)
@@ -81,9 +102,20 @@ const getUnverifiedReporters = async (req, res) => {
       role: "Reporter",
       verifiedReporter: false,
     });
+
+    const enrichedReporters = await Promise.all(
+      unverifiedReporters.map(async (user) => {
+        const wallet = await Wallet.findOne({ userId: user._id });
+        return {
+          ...user.toObject(),
+          walletBalance: wallet ? wallet.balance : 0
+        };
+      })
+    );
+
     res
       .status(200)
-      .json({ count: unverifiedReporters.length, unverifiedReporters });
+      .json({ count: enrichedReporters.length, unverifiedReporters: enrichedReporters });
   } catch (err) {
     res
       .status(500)
@@ -93,6 +125,7 @@ const getUnverifiedReporters = async (req, res) => {
       });
   }
 };
+
 
 module.exports = {
   getRaiseYourVoiceUsers,

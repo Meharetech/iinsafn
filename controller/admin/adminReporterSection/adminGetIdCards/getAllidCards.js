@@ -3,19 +3,8 @@ const sendEmail = require("../../../../utils/sendEmail");
 const notifyOnWhatsapp = require("../../../../utils/notifyOnWhatsapp")
 const Templates = require("../../../../utils/whatsappTemplates")
 const User = require("../../../../models/userModel/userModel")
+const Wallet = require("../../../../models/Wallet/walletSchema")
 
-// ✅ Get all ID cards with status 'Under Review'
-// const getAllidCards = async (req, res) => {
-//   try {
-//     const reportersIdCard = await genrateIdCard.find({
-//       status: "Under Review",
-//     });
-//     res.status(200).json({ success: true, reportersIdCard });
-//   } catch (error) {
-//     console.error("Error fetching reporters:", error);
-//     res.status(500).json({ success: false, message: "Server Error" });
-//   }
-// };
 
 
 
@@ -24,8 +13,8 @@ const getAllidCards = async (req, res) => {
   try {
     const reportersIdCard = await genrateIdCard
       .find({ status: "Under Review" })
-      .populate("reporter", "iinsafId"); 
-      // populate iinsafId from User schema
+      .populate("reporter", "iinsafId");
+    // populate iinsafId from User schema
 
     res.status(200).json({ success: true, reportersIdCard });
   } catch (error) {
@@ -141,7 +130,7 @@ const approveIdCardStatus = async (req, res) => {
     if (updatedCard.reporter) {
       updatedUser = await User.findByIdAndUpdate(
         updatedCard.reporter,
-        { 
+        {
           iinsafId,
           verifiedReporter: true // ✅ Automatically verify user when ID card is approved
         },
@@ -217,10 +206,8 @@ const rejectIdCard = async (req, res) => {
       await sendEmail(
         updatedCard.email,
         "❌ ID Card Rejected",
-        `Hello ${
-          updatedCard.name
-        },\n\nYour ID Card request has been rejected by the Admin.\nReason: ${
-          rejectNote || "No reason provided"
+        `Hello ${updatedCard.name
+        },\n\nYour ID Card request has been rejected by the Admin.\nReason: ${rejectNote || "No reason provided"
         }.\n\nYou can apply after 24 hours.\n\nRegards,\nTeam IINSAF`
       );
     }
@@ -252,20 +239,32 @@ const getApprovedCards = async (req, res) => {
   try {
     const { page = 1, limit = 50 } = req.query;
     const skip = (page - 1) * limit;
-    
+
     // Get approved cards sorted by latest first (most recent updatedAt/createdAt)
-    const reportersIdCard = await genrateIdCard
+    const reportersIdCardDocs = await genrateIdCard
       .find({ status: "Approved" })
       .sort({ updatedAt: -1, createdAt: -1 }) // Sort by latest first
       .skip(skip)
       .limit(parseInt(limit))
       .populate('reporter', 'iinsafId name email mobile role');
-    
+
+    // Fetch wallet balances for each reporter
+    const reportersIdCard = await Promise.all(reportersIdCardDocs.map(async (card) => {
+      const cardObj = card.toObject();
+      if (card.reporter && card.reporter._id) {
+        const userWallet = await Wallet.findOne({ userId: card.reporter._id });
+        cardObj.walletBalance = userWallet ? userWallet.balance : 0;
+      } else {
+        cardObj.walletBalance = 0;
+      }
+      return cardObj;
+    }));
+
     // Get total count for pagination
     const totalCount = await genrateIdCard.countDocuments({ status: "Approved" });
-    
-    res.status(200).json({ 
-      success: true, 
+
+    res.status(200).json({
+      success: true,
       reportersIdCard,
       pagination: {
         currentPage: parseInt(page),
@@ -281,6 +280,7 @@ const getApprovedCards = async (req, res) => {
   }
 };
 
+
 const getRejectCards = async (req, res) => {
   try {
     const reportersIdCard = await genrateIdCard.find({ status: "Rejected" });
@@ -295,33 +295,33 @@ const getRejectCards = async (req, res) => {
 const deleteReporterIdCard = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     console.log(`🗑️ Deleting reporter ID card: ${id}`);
-    
+
     // Find the ID card first
     const idCard = await genrateIdCard.findById(id);
-    
+
     if (!idCard) {
       return res.status(404).json({
         success: false,
         message: "Reporter ID card not found"
       });
     }
-    
+
     console.log(`📋 Found ID card for reporter: ${idCard.name} (${idCard.email})`);
-    
+
     // Delete the ID card
     const deleteResult = await genrateIdCard.findByIdAndDelete(id);
-    
+
     if (!deleteResult) {
       return res.status(404).json({
         success: false,
         message: "Failed to delete reporter ID card"
       });
     }
-    
+
     console.log(`✅ Successfully deleted reporter ID card for: ${idCard.name}`);
-    
+
     res.status(200).json({
       success: true,
       message: "Reporter ID card deleted successfully",
@@ -331,7 +331,7 @@ const deleteReporterIdCard = async (req, res) => {
         reporterEmail: idCard.email
       }
     });
-    
+
   } catch (error) {
     console.error("Error deleting reporter ID card:", error);
     res.status(500).json({
