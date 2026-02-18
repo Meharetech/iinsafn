@@ -29,7 +29,8 @@ const {
 
 const {
   adminApproveInitialProof,
-  adminRejectInitialProof
+  adminRejectInitialProof,
+  getPendingInitialProofs
 } = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/initialProofApproveReject");
 
 const getAdvertisementCompletionDetails = require("../../../controller/admin/adminReporterSection/adminGetCompletedAds/getAdvertisementCompletionDetails");
@@ -41,7 +42,7 @@ const adminAuthenticate = require("../../../middlewares/adminAuthenticate/adminA
 const verifyAdminAccess = require("../../../middlewares/adminAuthenticate/verifyAdminAccess");
 const isSuperAdmin = require("../../../middlewares/adminAuthenticate/isSuperAdmin");
 const adminUpdateIdCard = require("../../../controller/admin/adminReporterSection/adminUpdateReporterIdCard/adminUpdateIdCard")
-const {getAllWithdrawalRequests, rejectWithdrawal, approveWithdrawal} = require("../../../controller/admin/adminReporterSection/adminGetAllWithdrawRequest/getAllWithdrawalRequests");
+const { getAllWithdrawalRequests, rejectWithdrawal, approveWithdrawal } = require("../../../controller/admin/adminReporterSection/adminGetAllWithdrawRequest/getAllWithdrawalRequests");
 
 
 //free ads
@@ -55,21 +56,24 @@ const {
 
 const modifyFreeAd = require("../../../controller/admin/freeAds/modifyFreeAd")
 
-const {proofAccept,proofReject} = require("../../../controller/admin/adminReporterSection/FreeAds/proofAcceptReject")
+const { proofAccept, proofReject } = require("../../../controller/admin/adminReporterSection/FreeAds/proofAcceptReject")
 
 // Running conferences
-const {getRunningConferences, getConferenceWithReporters, getConferenceReporters, deleteReporterFromConference, getConferenceTargetedReporters} = require("../../../controller/admin/adminReporterSection/getRunningConferences")
+const { getRunningConferences, getConferenceWithReporters, getConferenceReporters, deleteReporterFromConference, getConferenceTargetedReporters } = require("../../../controller/admin/adminReporterSection/getRunningConferences")
 
 // Running paid conferences
-const {getRunningPaidConferences, getPaidConferenceWithReporters, getPaidConferenceReporters, deleteReporterFromPaidConference, getPaidConferenceTargetedReporters} = require("../../../controller/admin/adminReporterSection/getRunningPaidConferences")
+const { getRunningPaidConferences, getPaidConferenceWithReporters, getPaidConferenceReporters, deleteReporterFromPaidConference, getPaidConferenceTargetedReporters } = require("../../../controller/admin/adminReporterSection/getRunningPaidConferences")
 
 // Conference proof management
-const {approveConferenceProof, rejectConferenceProof, getConferencesWithProofs} = require("../../../controller/admin/adminReporterSection/approveRejectConferenceProof")
+const { approveConferenceProof, rejectConferenceProof, getConferencesWithProofs } = require("../../../controller/admin/adminReporterSection/approveRejectConferenceProof")
+
+// User ads tracking
+const { getUserAdsTracking, getUserAdDetails } = require("../../../controller/admin/adminReporterSection/adminUserAdsTracking/getUserAdsTracking")
 
 
 router.post("/genrate/coupon", adminAuthenticate, isSuperAdmin, generateCoupon);
-router.get("/get/all/coupons",adminAuthenticate, isSuperAdmin, getAllCoupons);
-router.delete("/delete/coupon/:id",adminAuthenticate,isSuperAdmin,deleteCoupon)
+router.get("/get/all/coupons", adminAuthenticate, isSuperAdmin, getAllCoupons);
+router.delete("/delete/coupon/:id", adminAuthenticate, isSuperAdmin, deleteCoupon)
 router.get("/coupon/history", adminAuthenticate, isSuperAdmin, getCouponHistory);
 
 
@@ -160,6 +164,14 @@ router.put(
   adminAuthenticate,
   verifyAdminAccess("reporter"),
   adminRejectInitialProof
+);
+
+// Get all pending initial proofs awaiting admin approval
+router.get(
+  "/admin/get/pending/initial/proofs",
+  adminAuthenticate,
+  verifyAdminAccess("reporter"),
+  getPendingInitialProofs
 );
 
 router.get(
@@ -358,6 +370,19 @@ router.delete("/admin/delete/reporter-id-card/:id",
   adminAuthenticate,
   verifyAdminAccess("reporter"),
   deleteReporterIdCard
+)
+
+// User ads tracking routes
+router.get("/admin/get/user-ads-tracking",
+  adminAuthenticate,
+  verifyAdminAccess("reporter"),
+  getUserAdsTracking
+)
+
+router.get("/admin/get/user-ad-details/:userId",
+  adminAuthenticate,
+  verifyAdminAccess("reporter"),
+  getUserAdDetails
 )
 
 module.exports = router;

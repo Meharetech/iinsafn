@@ -6,7 +6,7 @@ const Wallet = require("../../../../models/Wallet/walletSchema");
 const getAdvertisementCompletionDetails = async (req, res) => {
   try {
     const { adId } = req.params;
-    
+
     if (!adId) {
       return res.status(400).json({
         success: false,
@@ -17,8 +17,10 @@ const getAdvertisementCompletionDetails = async (req, res) => {
     console.log("🔍 Getting completion details for ad:", adId);
 
     // Find the advertisement
-    const advertisement = await Adpost.findById(adId).populate('owner', 'name email organization mobile iinsafId role');
-    
+    const advertisement = await Adpost.findById(adId)
+      .populate('owner', 'name email organization mobile iinsafId role')
+      .populate('acceptRejectReporterList.reporterId', 'name email iinsafId role');
+
     if (!advertisement) {
       return res.status(404).json({
         success: false,
@@ -29,8 +31,8 @@ const getAdvertisementCompletionDetails = async (req, res) => {
     console.log("📊 Advertisement found:", advertisement._id);
 
     // Find all proofs for this advertisement
-    const allProofs = await reporterAdProof.find({ adId: adId }).populate('proofs.reporterId', 'name email iinsafId role');
-    
+    const allProofs = await reporterAdProof.find({ adId: adId });
+
     console.log("📋 Total proofs found:", allProofs.length);
     console.log("📋 Total assigned reporters:", advertisement.acceptRejectReporterList?.length || 0);
 
@@ -50,7 +52,7 @@ const getAdvertisementCompletionDetails = async (req, res) => {
 
     // Process only the required number of reporters (take first N reporters from the list)
     const requiredReporters = (advertisement.acceptRejectReporterList || []).slice(0, advertisement.requiredReporter || 0);
-    
+
     console.log("📋 Required reporters:", advertisement.requiredReporter);
     console.log("📋 Total assigned reporters:", advertisement.acceptRejectReporterList?.length || 0);
     console.log("📋 Processing first", requiredReporters.length, "reporters");
@@ -59,78 +61,78 @@ const getAdvertisementCompletionDetails = async (req, res) => {
       // Find if this reporter has submitted any proof
       let reporterProof = null;
       for (const proofDoc of allProofs) {
-        reporterProof = proofDoc.proofs.find(p => 
+        reporterProof = proofDoc.proofs.find(p =>
           p.reporterId && p.reporterId._id.toString() === assignedReporter.reporterId.toString()
         );
         if (reporterProof) break;
       }
-        
-        const reporterDetail = {
-          reporterId: assignedReporter.reporterId,
-          reporterName: assignedReporter.reporterId?.name || 'Unknown',
-          reporterEmail: assignedReporter.reporterId?.email || 'Unknown',
-          iinsafId: assignedReporter.iinsafId,
-          channelName: reporterProof?.channelName || 'Not provided',
-          platform: reporterProof?.platform || 'Not specified',
-          status: reporterProof?.status || 'not_submitted',
-          submittedAt: reporterProof?.submittedAt,
-          adminApprovedAt: reporterProof?.adminApprovedAt,
-          adminRejectedAt: reporterProof?.adminRejectedAt,
-          adminRejectNote: reporterProof?.adminRejectNote,
-          adminRejectedBy: reporterProof?.adminRejectedBy,
-          adminRejectedByName: reporterProof?.adminRejectedByName,
-          completionSubmittedAt: reporterProof?.completionSubmittedAt,
-          completedTaskScreenshot: reporterProof?.completedTaskScreenshot,
-          shouldRefund: false,
-          refundAmount: 0,
-          refundReason: ''
-        };
 
-        // Check completion status - ONLY completed and admin approved work is considered complete
-        if (reporterProof && reporterProof.status === "completed" && reporterProof.adminApprovedAt) {
-          completionAnalysis.completedReporters++;
-          reporterDetail.refundReason = "Work completed successfully - no refund needed";
+      const reporterDetail = {
+        reporterId: assignedReporter.reporterId,
+        reporterName: assignedReporter.reporterId?.name || 'Unknown',
+        reporterEmail: assignedReporter.reporterId?.email || 'Unknown',
+        iinsafId: assignedReporter.iinsafId,
+        channelName: reporterProof?.channelName || 'Not provided',
+        platform: reporterProof?.platform || 'Not specified',
+        status: reporterProof?.status || 'not_submitted',
+        submittedAt: reporterProof?.submittedAt,
+        adminApprovedAt: reporterProof?.adminApprovedAt,
+        adminRejectedAt: reporterProof?.adminRejectedAt,
+        adminRejectNote: reporterProof?.adminRejectNote,
+        adminRejectedBy: reporterProof?.adminRejectedBy,
+        adminRejectedByName: reporterProof?.adminRejectedByName,
+        completionSubmittedAt: reporterProof?.completionSubmittedAt,
+        completedTaskScreenshot: reporterProof?.completedTaskScreenshot,
+        shouldRefund: false,
+        refundAmount: 0,
+        refundReason: ''
+      };
+
+      // Check completion status - ONLY completed and admin approved work is considered complete
+      if (reporterProof && reporterProof.status === "completed" && reporterProof.adminApprovedAt) {
+        completionAnalysis.completedReporters++;
+        reporterDetail.refundReason = "Work completed successfully - no refund needed";
+      } else {
+        // ALL other statuses are considered incomplete and need refund
+        completionAnalysis.incompleteReporters++;
+        reporterDetail.shouldRefund = true;
+        reporterDetail.refundAmount = advertisement.finalReporterPrice || 0;
+        completionAnalysis.totalRefundAmount += reporterDetail.refundAmount;
+
+        // Determine specific reason for refund
+        if (!reporterProof) {
+          reporterDetail.refundReason = "No proof submitted - incomplete task";
+        } else if (reporterProof.status === "rejected") {
+          reporterDetail.refundReason = "Work rejected by admin - incomplete task";
+        } else if (reporterProof.status === "submitted" && !reporterProof.adminApprovedAt) {
+          reporterDetail.refundReason = "Proof submitted but not approved by admin - incomplete task";
+        } else if (reporterProof.status === "accepted") {
+          reporterDetail.refundReason = "Initial proof accepted but completion work not submitted - incomplete task";
+        } else if (reporterProof.status === "pending") {
+          reporterDetail.refundReason = "Initial proof submitted but completion work not submitted - incomplete task";
         } else {
-          // ALL other statuses are considered incomplete and need refund
-          completionAnalysis.incompleteReporters++;
-          reporterDetail.shouldRefund = true;
-          reporterDetail.refundAmount = advertisement.finalReporterPrice || 0;
-          completionAnalysis.totalRefundAmount += reporterDetail.refundAmount;
-          
-          // Determine specific reason for refund
-          if (!reporterProof) {
-            reporterDetail.refundReason = "No proof submitted - incomplete task";
-          } else if (reporterProof.status === "rejected") {
-            reporterDetail.refundReason = "Work rejected by admin - incomplete task";
-          } else if (reporterProof.status === "submitted" && !reporterProof.adminApprovedAt) {
-            reporterDetail.refundReason = "Proof submitted but not approved by admin - incomplete task";
-          } else if (reporterProof.status === "accepted") {
-            reporterDetail.refundReason = "Initial proof accepted but completion work not submitted - incomplete task";
-          } else if (reporterProof.status === "pending") {
-            reporterDetail.refundReason = "Initial proof submitted but completion work not submitted - incomplete task";
-          } else {
-            reporterDetail.refundReason = "No proof submitted - incomplete task";
-          }
+          reporterDetail.refundReason = "No proof submitted - incomplete task";
         }
+      }
 
-        completionAnalysis.reporterDetails.push(reporterDetail);
+      completionAnalysis.reporterDetails.push(reporterDetail);
 
-        // Add to refund details if applicable
-        if (reporterDetail.shouldRefund) {
-          completionAnalysis.refundDetails.push({
-            reporterId: assignedReporter.reporterId,
-            reporterName: reporterDetail.reporterName,
-            amount: reporterDetail.refundAmount,
-            reason: reporterDetail.refundReason
-          });
-        }
+      // Add to refund details if applicable
+      if (reporterDetail.shouldRefund) {
+        completionAnalysis.refundDetails.push({
+          reporterId: assignedReporter.reporterId,
+          reporterName: reporterDetail.reporterName,
+          amount: reporterDetail.refundAmount,
+          reason: reporterDetail.refundReason
+        });
+      }
     }
 
     // Calculate completion percentage - only completed and admin approved work counts
-    const completionPercentage = completionAnalysis.totalReporters > 0 
-      ? (completionAnalysis.completedReporters / completionAnalysis.totalReporters) * 100 
+    const completionPercentage = completionAnalysis.totalReporters > 0
+      ? (completionAnalysis.completedReporters / completionAnalysis.totalReporters) * 100
       : 0;
-    
+
     console.log("📊 Completion Analysis:", {
       totalReporters: completionAnalysis.totalReporters,
       completedReporters: completionAnalysis.completedReporters,

@@ -13,7 +13,7 @@ const mongoose = require("mongoose");
 const adminApproveInitialProof = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const { adId, reporterId } = req.body;
     const adminId = req.user._id;
@@ -49,9 +49,9 @@ const adminApproveInitialProof = async (req, res) => {
 
     if (!updated) {
       await session.abortTransaction();
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Initial proof not found or not in pending status" 
+        message: "Initial proof not found or not in pending status"
       });
     }
 
@@ -81,7 +81,7 @@ const adminApproveInitialProof = async (req, res) => {
     // 3. Notify user (reporter or influencer)
     const user = await User.findById(reporterId);
     const userType = user?.role === "influencer" ? "Influencer" : "Reporter";
-    
+
     if (user) {
       // Email notification
       await sendEmail(
@@ -103,7 +103,7 @@ const adminApproveInitialProof = async (req, res) => {
         );
       }
     }
-    
+
     res.status(200).json({
       success: true,
       message: `Initial proof approved successfully. ${userType} can now proceed with the task.`,
@@ -118,9 +118,9 @@ const adminApproveInitialProof = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     console.error("❌ Error approving initial proof:", err);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: "Server error while approving initial proof" 
+      error: "Server error while approving initial proof"
     });
   } finally {
     session.endSession();
@@ -135,7 +135,7 @@ const adminApproveInitialProof = async (req, res) => {
 const adminRejectInitialProof = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const { adId, reporterId, adminNote } = req.body;
     const adminId = req.user._id;
@@ -182,9 +182,9 @@ const adminRejectInitialProof = async (req, res) => {
 
     if (!updated) {
       await session.abortTransaction();
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Initial proof not found or not in pending status" 
+        message: "Initial proof not found or not in pending status"
       });
     }
 
@@ -217,7 +217,7 @@ const adminRejectInitialProof = async (req, res) => {
     // 3. Notify user (reporter or influencer)
     const user = await User.findById(reporterId);
     const userType = user?.role === "influencer" ? "Influencer" : "Reporter";
-    
+
     if (user) {
       // Email notification
       await sendEmail(
@@ -240,7 +240,7 @@ const adminRejectInitialProof = async (req, res) => {
         );
       }
     }
-    
+
     res.status(200).json({
       success: true,
       message: `Initial proof rejected. ${userType} must resubmit.`,
@@ -256,17 +256,88 @@ const adminRejectInitialProof = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     console.error("❌ Error rejecting initial proof:", err);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: "Server error while rejecting initial proof" 
+      error: "Server error while rejecting initial proof"
     });
   } finally {
     session.endSession();
   }
 };
 
+/**
+ * Get all INITIAL proofs awaiting admin approval (status: "pending")
+ */
+const getPendingInitialProofs = async (req, res) => {
+  try {
+    console.log("🔍 Fetching all pending initial proofs...");
+
+    const pendingProofs = await reporterAdProof.find({
+      "proofs.status": "pending"
+    }).populate({
+      path: "adId",
+      select: "mediaDescription mediaType imageUrl videoUrl adType requiredViews"
+    }).populate({
+      path: "proofs.reporterId",
+      select: "name email mobile iinsafId role state city organization"
+    }).lean();
+
+    if (!pendingProofs || pendingProofs.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No pending initial proofs found",
+        data: []
+      });
+    }
+
+    // Filter and format the proofs
+    const formattedData = [];
+    pendingProofs.forEach(doc => {
+      doc.proofs.forEach(proof => {
+        if (proof.status === "pending") {
+          formattedData.push({
+            adProofId: doc._id,
+            adId: doc.adId?._id,
+            adTitle: doc.adId?.mediaDescription || "N/A",
+            adType: doc.adId?.adType,
+            mediaType: doc.adId?.mediaType,
+            mediaUrl: doc.adId?.mediaType === "video" ? doc.adId?.videoUrl : doc.adId?.imageUrl,
+
+            reporterId: proof.reporterId?._id,
+            reporterName: proof.reporterId?.name,
+            reporterEmail: proof.reporterId?.email,
+            reporterMobile: proof.reporterId?.mobile,
+            iinsafId: proof.iinsafId || proof.reporterId?.iinsafId,
+            userRole: proof.reporterId?.role,
+
+            screenshot: proof.screenshot,
+            submittedAt: proof.submittedAt,
+            status: proof.status
+          });
+        }
+      });
+    });
+
+    console.log(`✅ Found ${formattedData.length} pending initial proofs`);
+
+    res.status(200).json({
+      success: true,
+      message: "Pending initial proofs fetched successfully",
+      count: formattedData.length,
+      data: formattedData
+    });
+  } catch (error) {
+    console.error("❌ Error fetching pending initial proofs:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching pending initial proofs"
+    });
+  }
+};
+
 module.exports = {
   adminApproveInitialProof,
   adminRejectInitialProof,
+  getPendingInitialProofs,
 };
 

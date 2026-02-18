@@ -27,8 +27,10 @@ const markAdvertisementCompleted = async (req, res) => {
     console.log("💰 Refund choice:", shouldRefund ? "Yes, process refund" : "No, skip refund");
 
     // Find the advertisement
-    const advertisement = await Adpost.findById(adId).populate('owner', 'name email organization mobile iinsafId role');
-    
+    const advertisement = await Adpost.findById(adId)
+      .populate('owner', 'name email organization mobile iinsafId role')
+      .populate('acceptRejectReporterList.reporterId', 'name email iinsafId role');
+
     if (!advertisement) {
       await session.abortTransaction();
       return res.status(404).json({
@@ -40,8 +42,8 @@ const markAdvertisementCompleted = async (req, res) => {
     console.log("📊 Advertisement found:", advertisement._id);
 
     // Find all proofs for this advertisement
-    const allProofs = await reporterAdProof.find({ adId: adId }).populate('proofs.reporterId', 'name email iinsafId role');
-    
+    const allProofs = await reporterAdProof.find({ adId: adId });
+
     console.log("📋 Total proofs found:", allProofs.length);
     console.log("📋 Total assigned reporters:", advertisement.acceptRejectReporterList?.length || 0);
 
@@ -58,7 +60,7 @@ const markAdvertisementCompleted = async (req, res) => {
 
     // Process only the required number of reporters (take first N reporters from the list)
     const requiredReporters = (advertisement.acceptRejectReporterList || []).slice(0, advertisement.requiredReporter || 0);
-    
+
     console.log("📋 Required reporters:", advertisement.requiredReporter);
     console.log("📋 Total assigned reporters:", advertisement.acceptRejectReporterList?.length || 0);
     console.log("📋 Processing first", requiredReporters.length, "reporters");
@@ -67,98 +69,98 @@ const markAdvertisementCompleted = async (req, res) => {
       // Find if this reporter has submitted any proof
       let reporterProof = null;
       for (const proofDoc of allProofs) {
-        reporterProof = proofDoc.proofs.find(p => 
+        reporterProof = proofDoc.proofs.find(p =>
           p.reporterId && p.reporterId._id.toString() === assignedReporter.reporterId.toString()
         );
         if (reporterProof) break;
       }
-        
-        const reporterName = assignedReporter.reporterId?.name || 'Unknown';
-        const reporterEmail = assignedReporter.reporterId?.email || 'Unknown';
-        const refundAmount = advertisement.finalReporterPrice || 0;
 
-        // Check completion status - ONLY completed and admin approved work is considered complete
-        if (reporterProof && reporterProof.status === "completed" && reporterProof.adminApprovedAt) {
-          completionResults.completedReporters++;
-          console.log(`✅ Reporter ${reporterName} completed work successfully`);
+      const reporterName = assignedReporter.reporterId?.name || 'Unknown';
+      const reporterEmail = assignedReporter.reporterId?.email || 'Unknown';
+      const refundAmount = advertisement.finalReporterPrice || 0;
+
+      // Check completion status - ONLY completed and admin approved work is considered complete
+      if (reporterProof && reporterProof.status === "completed" && reporterProof.adminApprovedAt) {
+        completionResults.completedReporters++;
+        console.log(`✅ Reporter ${reporterName} completed work successfully`);
+      } else {
+        // ALL other statuses are considered incomplete and need refund
+        completionResults.rejectedReporters++;
+
+        let rejectReason = "";
+        if (!reporterProof) {
+          rejectReason = "No proof submitted - incomplete task";
+        } else if (reporterProof.status === "rejected") {
+          rejectReason = "Work rejected by admin - incomplete task";
+        } else if (reporterProof.status === "submitted" && !reporterProof.adminApprovedAt) {
+          rejectReason = "Proof submitted but not approved by admin - incomplete task";
+        } else if (reporterProof.status === "accepted") {
+          rejectReason = "Initial proof accepted but completion work not submitted - incomplete task";
+        } else if (reporterProof.status === "pending") {
+          rejectReason = "Initial proof submitted but completion work not submitted - incomplete task";
         } else {
-          // ALL other statuses are considered incomplete and need refund
-          completionResults.rejectedReporters++;
-          
-          let rejectReason = "";
-          if (!reporterProof) {
-            rejectReason = "No proof submitted - incomplete task";
-          } else if (reporterProof.status === "rejected") {
-            rejectReason = "Work rejected by admin - incomplete task";
-          } else if (reporterProof.status === "submitted" && !reporterProof.adminApprovedAt) {
-            rejectReason = "Proof submitted but not approved by admin - incomplete task";
-          } else if (reporterProof.status === "accepted") {
-            rejectReason = "Initial proof accepted but completion work not submitted - incomplete task";
-          } else if (reporterProof.status === "pending") {
-            rejectReason = "Initial proof submitted but completion work not submitted - incomplete task";
-          } else {
-            rejectReason = "No proof submitted - incomplete task";
-          }
+          rejectReason = "No proof submitted - incomplete task";
+        }
 
-          // Update proof status to rejected (only if proof exists)
-          if (reporterProof) {
-            await reporterAdProof.updateOne(
-              { 
-                adId: adId,
-                "proofs.reporterId": assignedReporter.reporterId
-              },
-              {
-                $set: {
-                  "proofs.$.status": "rejected",
-                  "proofs.$.adminRejectedAt": new Date(),
-                  "proofs.$.adminRejectedBy": adminId,
-                  "proofs.$.adminRejectedByName": adminName,
-                  "proofs.$.adminRejectNote": `Advertisement marked as completed. ${rejectReason}. You did not complete your work on time.`
-                }
-              },
-              { session }
-            );
-          }
-
-          // Update Adpost status
-          await Adpost.updateOne(
-            { 
-              _id: adId,
-              "acceptRejectReporterList.reporterId": assignedReporter.reporterId
+        // Update proof status to rejected (only if proof exists)
+        if (reporterProof) {
+          await reporterAdProof.updateOne(
+            {
+              adId: adId,
+              "proofs.reporterId": assignedReporter.reporterId
             },
             {
               $set: {
-                "acceptRejectReporterList.$.postStatus": "rejected",
-                "acceptRejectReporterList.$.rejectedAt": new Date(),
-                "acceptRejectReporterList.$.adminRejectedBy": adminId,
-                "acceptRejectReporterList.$.adminRejectedByName": adminName,
-                "acceptRejectReporterList.$.rejectNote": `Advertisement marked as completed. ${rejectReason}. You did not complete your work on time.`
+                "proofs.$.status": "rejected",
+                "proofs.$.adminRejectedAt": new Date(),
+                "proofs.$.adminRejectedBy": adminId,
+                "proofs.$.adminRejectedByName": adminName,
+                "proofs.$.adminRejectNote": `Advertisement marked as completed. ${rejectReason}. You did not complete your work on time.`
               }
             },
             { session }
           );
-
-          completionResults.refundedReporters++;
-          completionResults.totalRefundAmount += refundAmount;
-          completionResults.refundDetails.push({
-            reporterId: assignedReporter.reporterId,
-            reporterName: reporterName,
-            reporterEmail: reporterEmail,
-            amount: refundAmount,
-            reason: rejectReason
-          });
-
-          console.log(`💰 Will refund ₹${refundAmount} to advertiser for incomplete work by ${reporterName}`);
-
-          completionResults.rejectedDetails.push({
-            reporterId: assignedReporter.reporterId,
-            reporterName: reporterName,
-            reporterEmail: reporterEmail,
-            reason: rejectReason
-          });
-
-          console.log(`❌ Rejected reporter ${reporterName}: ${rejectReason}`);
         }
+
+        // Update Adpost status
+        await Adpost.updateOne(
+          {
+            _id: adId,
+            "acceptRejectReporterList.reporterId": assignedReporter.reporterId
+          },
+          {
+            $set: {
+              "acceptRejectReporterList.$.postStatus": "rejected",
+              "acceptRejectReporterList.$.rejectedAt": new Date(),
+              "acceptRejectReporterList.$.adminRejectedBy": adminId,
+              "acceptRejectReporterList.$.adminRejectedByName": adminName,
+              "acceptRejectReporterList.$.rejectNote": `Advertisement marked as completed. ${rejectReason}. You did not complete your work on time.`
+            }
+          },
+          { session }
+        );
+
+        completionResults.refundedReporters++;
+        completionResults.totalRefundAmount += refundAmount;
+        completionResults.refundDetails.push({
+          reporterId: assignedReporter.reporterId,
+          reporterName: reporterName,
+          reporterEmail: reporterEmail,
+          amount: refundAmount,
+          reason: rejectReason
+        });
+
+        console.log(`💰 Will refund ₹${refundAmount} to advertiser for incomplete work by ${reporterName}`);
+
+        completionResults.rejectedDetails.push({
+          reporterId: assignedReporter.reporterId,
+          reporterName: reporterName,
+          reporterEmail: reporterEmail,
+          reason: rejectReason
+        });
+
+        console.log(`❌ Rejected reporter ${reporterName}: ${rejectReason}`);
+      }
     }
 
     // Process refunds to advertiser wallet if any (only if admin chose to refund)
@@ -166,10 +168,10 @@ const markAdvertisementCompleted = async (req, res) => {
     if (completionResults.totalRefundAmount > 0 && shouldRefund) {
       try {
         console.log(`💰 Processing total refund of ₹${completionResults.totalRefundAmount} to advertiser`);
-        
+
         // Find or create advertiser wallet
         let advertiserWallet = await Wallet.findOne({ userId: advertisement.owner._id });
-        
+
         if (!advertiserWallet) {
           advertiserWallet = new Wallet({
             userId: advertisement.owner._id,
@@ -191,7 +193,7 @@ const markAdvertisementCompleted = async (req, res) => {
 
         await advertiserWallet.save({ session });
         refundProcessed = true;
-        
+
         console.log(`✅ Successfully refunded ₹${completionResults.totalRefundAmount} to advertiser wallet`);
         console.log(`💰 New wallet balance: ₹${advertiserWallet.balance}`);
 

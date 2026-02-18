@@ -10,35 +10,66 @@ const mongoose = require("mongoose"); // ✅ Add mongoose for transactions
 const getCompletedAds = async (req, res) => {
   try {
     const completedAds = await reporterAdProof.find({
-      proofs: {
-        $elemMatch: {
-          status: "submitted", // ✅ Show submitted proofs awaiting admin approval
-        },
-      },
-    });
+      "proofs.status": "submitted", // ✅ Show submitted proofs awaiting admin approval
+    }).populate({
+      path: "adId",
+      select: "mediaDescription mediaType imageUrl videoUrl adType requiredViews"
+    }).populate({
+      path: "proofs.reporterId",
+      select: "name email mobile iinsafId role state city organization"
+    }).lean();
 
-    // Filter only relevant proofs in each document
-    const filteredAds = completedAds.map((ad) => {
-      const matchingProofs = ad.proofs.filter(
-        (proof) => proof.status === "submitted"
-      );
+    if (!completedAds || completedAds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No submitted proofs found",
+        data: []
+      });
+    }
 
-      return {
-        ...ad._doc, // spread original ad data
-        proofs: matchingProofs, // overwrite proofs with filtered
-      };
+    // Filter and format the proofs
+    const formattedData = [];
+    completedAds.forEach(doc => {
+      doc.proofs.forEach(proof => {
+        if (proof.status === "submitted") {
+          formattedData.push({
+            adProofId: doc._id,
+            adId: doc.adId?._id,
+            adTitle: doc.adId?.mediaDescription || "N/A",
+            adType: doc.adId?.adType,
+            mediaType: doc.adId?.mediaType,
+            mediaUrl: doc.adId?.mediaType === "video" ? doc.adId?.videoUrl : doc.adId?.imageUrl,
+
+            reporterId: proof.reporterId?._id,
+            reporterName: proof.reporterId?.name,
+            reporterEmail: proof.reporterId?.email,
+            reporterMobile: proof.reporterId?.mobile,
+            iinsafId: proof.iinsafId || proof.reporterId?.iinsafId,
+            userRole: proof.reporterId?.role,
+
+            screenshot: proof.screenshot, // Initial proof screenshot
+            completedTaskScreenshot: proof.completedTaskScreenshot, // Final completion screenshot
+            videoLink: proof.videoLink,
+            platform: proof.platform,
+            submittedAt: proof.submittedAt,
+            completionSubmittedAt: proof.completionSubmittedAt,
+            status: proof.status
+          });
+        }
+      });
     });
 
     res.status(200).json({
       success: true,
-      message: "Filtered completed ads fetched successfully",
-      data: filteredAds,
+      message: "Submitted final proofs fetched successfully",
+      count: formattedData.length,
+      data: formattedData,
     });
   } catch (error) {
     console.error("Error in getCompletedAds:", error.message);
     res.status(500).json({
       success: false,
-      message: "Server error while fetching completed ads",
+      message: "Server error while fetching submitted ads",
     });
   }
 };
@@ -46,7 +77,7 @@ const getCompletedAds = async (req, res) => {
 const adminApproveAdsProof = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const { adId, reporterId } = req.body;
 
@@ -131,7 +162,7 @@ const adminApproveAdsProof = async (req, res) => {
     // 5. Get user role to determine wallet userType
     const userForWallet = await User.findById(reporterId);
     const userType = userForWallet?.role === "Influencer" ? "Influencer" : "Reporter";
-    
+
     // 6. Wallet logic
     let wallet = await Wallet.findOne({
       userId: reporterId,
@@ -226,7 +257,7 @@ const adminApproveAdsProof = async (req, res) => {
 async function adminRejectAdsProof(req, res) {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const { adId, reporterId, adminNote } = req.body;
     const adminId = req.user._id;
@@ -291,10 +322,8 @@ async function adminRejectAdsProof(req, res) {
       await sendEmail(
         user.email,
         "Your Completion Screenshot Has Been Rejected ❌",
-        `Hello ${
-          user.name
-        },\n\nYour completion screenshot for Ad ID: ${adId} has been rejected by Admin: ${adminName}.\nReason: ${
-          adminNote || "No reason provided"
+        `Hello ${user.name
+        },\n\nYour completion screenshot for Ad ID: ${adId} has been rejected by Admin: ${adminName}.\nReason: ${adminNote || "No reason provided"
         }.\n\nYour initial proof is still valid. Please resubmit the completion screenshot.\n\nRegards,\nTeam`
       );
 
@@ -366,10 +395,10 @@ const getFinalCompletedAds = async (req, res) => {
         createdAt: ad.adId.createdAt,
         updatedAt: ad.adId.updatedAt,
         status: ad.adId.status,
-        
+
         // Owner/Advertiser details
         owner: ad.adId.owner,
-        
+
         // Proof-related data from reporterAdProof
         proofs: matchingProofs,
         runningAdStatus: ad.runningAdStatus,
