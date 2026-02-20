@@ -33,7 +33,7 @@ const calculatePaidConferencePrice = async (req, res) => {
     // Get pricing data
     const pricing = await AdPricing.findOne();
     console.log("Pricing data from database:", pricing);
-    
+
     if (!pricing) {
       console.log("No pricing configuration found");
       return res.status(404).json({
@@ -171,7 +171,7 @@ const submitPaidConference = async (req, res) => {
 
     // Validate required fields
     const requiredFields = [
-      'topic', 'purpose', 'conferenceDate', 'conferenceTime', 
+      'topic', 'purpose', 'conferenceDate', 'conferenceTime',
       'timePeriod', 'state', 'city', 'place', 'landmark'
     ];
 
@@ -188,7 +188,7 @@ const submitPaidConference = async (req, res) => {
     const wordCount = purpose.trim().split(/\s+/).filter(word => word.length > 0).length;
     console.log("Purpose word count:", wordCount);
     console.log("Purpose text:", purpose);
-    
+
     if (wordCount < 10) {
       console.log("Purpose validation failed - too few words:", wordCount);
       return res.status(400).json({
@@ -200,7 +200,7 @@ const submitPaidConference = async (req, res) => {
     // Validate minimum 1 reporter for paid conferences
     const reporterCount = parseInt(numberOfReporters) || 0;
     console.log("Number of reporters:", reporterCount);
-    
+
     if (reporterCount < 1) {
       console.log("Reporter validation failed - minimum 1 required:", reporterCount);
       return res.status(400).json({
@@ -231,16 +231,16 @@ const submitPaidConference = async (req, res) => {
     let walletPaymentId = null;
     if (paymentMethod === "wallet") {
       console.log("Processing wallet payment for amount:", totalAmount);
-      
+
       // Generate payment ID for wallet payment
       walletPaymentId = `WALLET_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
+
       // Find or create wallet for the user
-      let wallet = await Wallet.findOne({ 
-        userId: userId, 
-        userType: "PressConferenceUser" 
+      let wallet = await Wallet.findOne({
+        userId: userId,
+        userType: "PressConferenceUser"
       });
-      
+
       if (!wallet) {
         wallet = new Wallet({
           userId: userId,
@@ -263,7 +263,7 @@ const submitPaidConference = async (req, res) => {
       // Deduct amount from wallet
       const previousBalance = wallet.balance;
       wallet.balance = Number(previousBalance) - Number(totalAmount);
-      
+
       const walletTransaction = {
         type: "debit",
         amount: totalAmount,
@@ -273,10 +273,10 @@ const submitPaidConference = async (req, res) => {
         paymentId: walletPaymentId,
         conferenceId: `PAID${Date.now()}`
       };
-      
+
       wallet.transactions.push(walletTransaction);
       await wallet.save();
-      
+
       console.log(`Wallet payment processed: ₹${totalAmount} deducted from wallet. Payment ID: ${walletPaymentId}. New balance: ₹${wallet.balance}`);
     }
 
@@ -350,7 +350,7 @@ const getUserPaidConferences = async (req, res) => {
     // Process conferences to include reporter details
     const processedConferences = conferences.map(conference => {
       const conferenceObj = conference.toObject();
-      
+
       // Process accepted reporters to include full details
       if (conferenceObj.acceptedReporters && conferenceObj.acceptedReporters.length > 0) {
         conferenceObj.acceptedReporters = conferenceObj.acceptedReporters.map(reporter => {
@@ -395,14 +395,14 @@ const getUserPaidConferences = async (req, res) => {
 const getAllPaidConferences = async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
-    
+
     let query = {};
     if (status) {
       query.status = status;
     }
 
     const conferences = await PaidConference.find(query)
-      .populate('submittedBy', 'name email')
+      .populate('submittedBy', 'name email organization pressConferenceId')
       .populate('acceptedReporters.reporterId', 'name email iinsafId city state')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
@@ -468,7 +468,7 @@ const getAllPaidConferences = async (req, res) => {
 const getPaidConferencesWithProofs = async (req, res) => {
   try {
     const { page = 1, limit = 15 } = req.query;
-    
+
     // Find conferences that are approved, modified, or running AND have submitted proofs (but not completed)
     const conferences = await PaidConference.find({
       status: { $in: ["approved", "modified", "running"] },
@@ -485,20 +485,20 @@ const getPaidConferencesWithProofs = async (req, res) => {
       status: { $in: ["approved", "modified", "running"] },
       "acceptedReporters.proofSubmitted": true
     });
-    
+
     const conferencesWithValidProofs = allConferences.filter(conference => {
       const acceptedReporters = conference.acceptedReporters || [];
-      return acceptedReporters.some(reporter => 
+      return acceptedReporters.some(reporter =>
         reporter.proofSubmitted && reporter.proof?.status !== "rejected" && reporter.proof?.status !== "approved"
       );
     });
-    
+
     const total = conferencesWithValidProofs.length;
 
     // Filter conferences to only show those with valid (non-rejected, non-approved) proofs
     const validConferences = conferences.filter(conference => {
       const acceptedReporters = conference.acceptedReporters || [];
-      return acceptedReporters.some(reporter => 
+      return acceptedReporters.some(reporter =>
         reporter.proofSubmitted && reporter.proof?.status !== "rejected" && reporter.proof?.status !== "approved"
       );
     });
@@ -507,13 +507,13 @@ const getPaidConferencesWithProofs = async (req, res) => {
     const processedConferences = validConferences.map(conference => {
       const acceptedReporters = conference.acceptedReporters || [];
       const totalAccepted = acceptedReporters.length;
-      const totalProofSubmitted = acceptedReporters.filter(reporter => 
+      const totalProofSubmitted = acceptedReporters.filter(reporter =>
         reporter.proofSubmitted && reporter.proof?.status !== "rejected" && reporter.proof?.status !== "approved"
       ).length;
       const totalProofPending = totalAccepted - totalProofSubmitted;
-      
+
       // Get reporters with submitted proofs (excluding rejected and approved ones)
-      const reportersWithProofs = acceptedReporters.filter(reporter => 
+      const reportersWithProofs = acceptedReporters.filter(reporter =>
         reporter.proofSubmitted && reporter.proof?.status !== "rejected" && reporter.proof?.status !== "approved"
       );
 
@@ -561,12 +561,12 @@ const getPaidConferencesWithProofs = async (req, res) => {
 const adminActionPaidConference = async (req, res) => {
   try {
     const { conferenceId } = req.params;
-    const { 
-      action, 
-      note, 
-      selectedStates, 
-      adminSelectCities, 
-      adminSelectPincode, 
+    const {
+      action,
+      note,
+      selectedStates,
+      adminSelectCities,
+      adminSelectPincode,
       reporterId
     } = req.body;
     const adminId = req.user._id;
@@ -602,32 +602,32 @@ const adminActionPaidConference = async (req, res) => {
     if (action === "approved") {
       // Calculate commission and distribute to reporters
       await handleApprovalWithCommission(conference, commissionPercentage);
-      
+
       // Set targeting configuration for initial approval
       if (selectedStates && selectedStates.length > 0) {
         conference.adminSelectState = selectedStates;
         console.log(`Conference ${conferenceId} approved with selected states:`, selectedStates);
       }
-      
+
       if (adminSelectCities && adminSelectCities.length > 0) {
         conference.adminSelectCities = adminSelectCities;
         console.log(`Conference ${conferenceId} approved with selected cities:`, adminSelectCities);
       }
-      
+
       if (reporterId && reporterId.length > 0) {
         conference.reporterId = reporterId;
         console.log(`Conference ${conferenceId} approved with selected reporters:`, reporterId);
       }
-      
+
       // If no specific targeting is provided, use original state/city as default
-      if ((!selectedStates || selectedStates.length === 0) && 
-          (!adminSelectCities || adminSelectCities.length === 0) && 
-          (!reporterId || reporterId.length === 0)) {
+      if ((!selectedStates || selectedStates.length === 0) &&
+        (!adminSelectCities || adminSelectCities.length === 0) &&
+        (!reporterId || reporterId.length === 0)) {
         // Use original state and city as default targeting
         conference.adminSelectState = [conference.state];
         conference.adminSelectCities = [conference.city];
         console.log(`Conference ${conferenceId} approved with default targeting - state: ${conference.state}, city: ${conference.city}`);
-        
+
         // Find and save the actual users who will be notified
         const actualTargetedUsers = await User.find({
           role: "Reporter",
@@ -635,27 +635,27 @@ const adminActionPaidConference = async (req, res) => {
           state: conference.state,
           city: conference.city
         }).select("_id");
-        
+
         // Save the actual targeted user IDs
         conference.reporterId = actualTargetedUsers.map(user => user._id);
         console.log(`Conference ${conferenceId} - saved ${actualTargetedUsers.length} actually targeted users:`, actualTargetedUsers.map(u => u._id));
       }
-      
+
     } else if (action === "rejected") {
       // Refund full amount to user's wallet
       await handleRejectionWithRefund(conference, note);
     } else if (action === "modified") {
       // Calculate commission and distribute to reporters (same as approval)
       await handleApprovalWithCommission(conference, commissionPercentage);
-      
+
       // For modification, PRESERVE all existing targeting and ADD new targeting
       console.log(`🔄 MODIFYING Conference ${conferenceId} - preserving all existing data`);
-      
+
       // Handle states - combine existing with new
       if (selectedStates && selectedStates.length > 0) {
         const existingStates = conference.adminSelectState || [];
         const originalState = conference.state ? [conference.state] : [];
-        
+
         // Combine original state, existing admin states, and new states
         const allStates = [...new Set([...originalState, ...existingStates, ...selectedStates])];
         conference.adminSelectState = allStates;
@@ -667,12 +667,12 @@ const adminActionPaidConference = async (req, res) => {
           combined: allStates
         });
       }
-      
+
       // Handle cities - combine existing with new
       if (adminSelectCities && adminSelectCities.length > 0) {
         const existingCities = conference.adminSelectCities || [];
         const originalCity = conference.city ? [conference.city] : [];
-        
+
         // Combine original city, existing admin cities, and new cities
         const allCities = [...new Set([...originalCity, ...existingCities, ...adminSelectCities])];
         conference.adminSelectCities = allCities;
@@ -683,17 +683,17 @@ const adminActionPaidConference = async (req, res) => {
           combined: allCities
         });
       }
-      
+
       // Handle pincode - use new if provided
       if (adminSelectPincode) {
         conference.adminSelectPincode = adminSelectPincode;
         console.log(`Conference ${conferenceId} modified with pincode:`, adminSelectPincode);
       }
-      
+
       // Handle reporters - combine existing with new
       if (reporterId && reporterId.length > 0) {
         const existingReporters = conference.reporterId || [];
-        
+
         // Combine existing and new reporter IDs
         const allReporters = [...new Set([...existingReporters.map(id => id.toString()), ...reporterId.map(id => id.toString())])];
         conference.reporterId = allReporters;
@@ -703,7 +703,7 @@ const adminActionPaidConference = async (req, res) => {
           combined: allReporters
         });
       }
-      
+
       // Log final targeting configuration
       console.log(`🎯 Final targeting configuration for ${conferenceId}:`, {
         adminSelectState: conference.adminSelectState,
@@ -728,7 +728,7 @@ const adminActionPaidConference = async (req, res) => {
     };
 
     await conference.save();
-    
+
     console.log(`Conference ${conferenceId} saved with status: ${conference.status}`);
     console.log(`Targeting configuration:`, {
       adminSelectState: conference.adminSelectState,
@@ -741,11 +741,11 @@ const adminActionPaidConference = async (req, res) => {
     if (action === "modified") {
       try {
         const ReporterConference = require("../../models/reporterConference/reporterConference");
-        
+
         if (reporterId && reporterId.length > 0) {
           // Clear rejection status for specific selected reporters
           console.log(`🔄 Clearing rejection status for ${reporterId.length} selected reporters`);
-          
+
           const updateResult = await ReporterConference.updateMany(
             {
               conferenceId: conference.conferenceId,
@@ -764,12 +764,12 @@ const adminActionPaidConference = async (req, res) => {
               }
             }
           );
-          
+
           console.log(`✅ Cleared rejection status for ${updateResult.modifiedCount} selected reporters`);
         } else {
           // Clear rejection status for all reporters in this conference
           console.log(`🔄 Clearing rejection status for all reporters in conference ${conference.conferenceId}`);
-          
+
           const updateResult = await ReporterConference.updateMany(
             {
               conferenceId: conference.conferenceId,
@@ -787,10 +787,10 @@ const adminActionPaidConference = async (req, res) => {
               }
             }
           );
-          
+
           console.log(`✅ Cleared rejection status for ${updateResult.modifiedCount} all reporters`);
         }
-        
+
       } catch (clearRejectionError) {
         console.error(`❌ Error clearing rejection status:`, clearRejectionError);
         // Don't fail the request if clearing rejection fails
@@ -834,9 +834,9 @@ const verifyPayment = async (req, res) => {
       // Fetch current GST rate from pricing settings
       const pricing = await AdPricing.findOne().sort({ createdAt: -1 });
       const gstRate = pricing?.gstRate || 0; // Default to 0 if not set
-      
+
       const totalAmount = payment.amount / 100; // Razorpay returns in paise
-      
+
       // ✅ Calculate GST using the same formula as in createPaidConferenceOrder
       // Formula: total = subtotal + (subtotal * gstRate/100)
       // So: subtotal = total / (1 + gstRate/100)
@@ -847,7 +847,7 @@ const verifyPayment = async (req, res) => {
         subtotal = totalAmount / (1 + gstRate / 100);
         gstAmount = totalAmount - subtotal;
       }
-      
+
       const newHistory = new paymentHistory({
         user: userId,
         paymentId: paymentId,
@@ -965,7 +965,7 @@ const getPaymentHistory = async (req, res) => {
     // Remove duplicates based on paymentId
     const uniquePayments = [];
     const seenPaymentIds = new Set();
-    
+
     allPayments.forEach(payment => {
       if (!seenPaymentIds.has(payment.paymentId)) {
         seenPaymentIds.add(payment.paymentId);
@@ -997,21 +997,21 @@ const handleApprovalWithCommission = async (conference, commissionPercentage) =>
   try {
     const totalAmount = conference.paymentAmount;
     const numberOfReporters = conference.numberOfReporters;
-    
+
     // Calculate commission amount
     const commissionAmount = (totalAmount * commissionPercentage) / 100;
     const amountAfterCommission = totalAmount - commissionAmount;
-    
+
     // Calculate amount per reporter
     const amountPerReporter = numberOfReporters > 0 ? amountAfterCommission / numberOfReporters : 0;
-    
+
     console.log(`Commission Calculation:
       Total Amount: ₹${totalAmount}
       Commission (${commissionPercentage}%): ₹${commissionAmount}
       Amount After Commission: ₹${amountAfterCommission}
       Number of Reporters: ${numberOfReporters}
       Amount Per Reporter: ₹${amountPerReporter}`);
-    
+
     // Store commission details in conference
     conference.commissionDetails = {
       commissionPercentage,
@@ -1020,10 +1020,10 @@ const handleApprovalWithCommission = async (conference, commissionPercentage) =>
       amountPerReporter,
       calculatedAt: new Date()
     };
-    
+
     // Note: Actual distribution to reporters will happen when they accept the conference
     // This just calculates and stores the amounts
-    
+
   } catch (error) {
     console.error("Error in handleApprovalWithCommission:", error);
     throw error;
@@ -1035,19 +1035,19 @@ const handleRejectionWithRefund = async (conference, rejectionNote) => {
   try {
     const refundAmount = conference.paymentAmount;
     const userId = conference.submittedBy;
-    
+
     console.log(`Processing refund:
       Conference ID: ${conference.conferenceId}
       User ID: ${userId}
       Refund Amount: ₹${refundAmount}
       Rejection Note: ${rejectionNote}`);
-    
+
     // Find or create user's wallet
     let wallet = await Wallet.findOne({
       userId: userId,
       userType: "PressConferenceUser"
     });
-    
+
     if (!wallet) {
       wallet = new Wallet({
         userId: userId,
@@ -1055,11 +1055,11 @@ const handleRejectionWithRefund = async (conference, rejectionNote) => {
         balance: 0
       });
     }
-    
+
     // Credit refund amount to wallet
     const previousBalance = wallet.balance || 0;
     wallet.balance = Number(previousBalance) + Number(refundAmount);
-    
+
     const refundTransaction = {
       type: "credit",
       amount: refundAmount,
@@ -1069,11 +1069,11 @@ const handleRejectionWithRefund = async (conference, rejectionNote) => {
       refundId: `REF-${Date.now()}-${conference.conferenceId}`,
       rejectionReason: rejectionNote || "Conference rejected by admin"
     };
-    
+
     wallet.transactions.push(refundTransaction);
-    
+
     await wallet.save();
-    
+
     // Store refund details in conference
     conference.refundDetails = {
       refundAmount,
@@ -1081,7 +1081,7 @@ const handleRejectionWithRefund = async (conference, rejectionNote) => {
       rejectionNote: rejectionNote || "Conference rejected by admin",
       refundTransactionId: refundTransaction.refundId
     };
-    
+
     console.log(`✅ Refund processed successfully:
       - Conference ID: ${conference.conferenceId}
       - User ID: ${userId}
@@ -1090,7 +1090,7 @@ const handleRejectionWithRefund = async (conference, rejectionNote) => {
       - New Balance: ₹${wallet.balance}
       - Transaction ID: ${refundTransaction.refundId}
       - Rejection Reason: ${rejectionNote}`);
-    
+
   } catch (error) {
     console.error("Error in handleRejectionWithRefund:", error);
     throw error;
@@ -1137,7 +1137,7 @@ const completePaidConference = async (req, res) => {
       console.log("Conference ID:", conferenceId);
       console.log("Conference status:", conference.status);
       console.log("Total accepted reporters:", conference.acceptedReporters?.length || 0);
-      
+
       if (conference.acceptedReporters && conference.acceptedReporters.length > 0) {
         console.log("Available reporters:");
         conference.acceptedReporters.forEach((r, index) => {
@@ -1156,13 +1156,13 @@ const completePaidConference = async (req, res) => {
           message: "No accepted reporters found in this conference"
         });
       }
-      
-      const reporter = conference.acceptedReporters.find(r => 
+
+      const reporter = conference.acceptedReporters.find(r =>
         r.reporterId && r.reporterId.toString() === reporterId.toString()
       );
-      
+
       if (!reporter) {
-        console.log("Reporter not found. Available reporter IDs:", 
+        console.log("Reporter not found. Available reporter IDs:",
           conference.acceptedReporters.map(r => r.reporterId?.toString()).filter(Boolean)
         );
         console.log("Looking for:", reporterId.toString());
@@ -1171,7 +1171,7 @@ const completePaidConference = async (req, res) => {
           message: "Reporter not found in this conference"
         });
       }
-      
+
       console.log("Found reporter:", {
         reporterId: reporter.reporterId,
         reporterName: reporter.reporterName,
@@ -1235,8 +1235,8 @@ const completePaidConference = async (req, res) => {
       // Credit the reporter's wallet after successful approval
       if (conference.commissionDetails?.amountPerReporter > 0) {
         await creditReporterWallet(
-          reporter.reporterId, 
-          conference.commissionDetails.amountPerReporter, 
+          reporter.reporterId,
+          conference.commissionDetails.amountPerReporter,
           conference.conferenceId
         );
       }
@@ -1245,7 +1245,7 @@ const completePaidConference = async (req, res) => {
 
       // 🔑 CRITICAL FIX: Check completion based on required number of reporters, not all accepted
       const requiredReporters = approvalResult.numberOfReporters;
-      const completedReporters = approvalResult.acceptedReporters.filter(r => 
+      const completedReporters = approvalResult.acceptedReporters.filter(r =>
         r.proofSubmitted && r.proof?.status === 'approved'
       );
 
@@ -1264,16 +1264,16 @@ const completePaidConference = async (req, res) => {
         // Update completion details
         await PaidConference.findOneAndUpdate(
           { conferenceId: conferenceId },
-          { 
-            $set: { 
+          {
+            $set: {
               completedAt: new Date(),
               completedBy: adminId
-            } 
+            }
           }
         );
-        
+
         console.log(`All proofs approved. Conference ${conferenceId} marked as completed`);
-        
+
         return res.status(200).json({
           success: true,
           message: "Proof approved and conference completed successfully",
@@ -1293,11 +1293,11 @@ const completePaidConference = async (req, res) => {
         for (const acceptedReporter of conference.acceptedReporters) {
           if (acceptedReporter.status === "accepted" && conference.commissionDetails?.amountPerReporter > 0) {
             await creditReporterWallet(
-              acceptedReporter.reporterId, 
-              conference.commissionDetails.amountPerReporter, 
+              acceptedReporter.reporterId,
+              conference.commissionDetails.amountPerReporter,
               conference.conferenceId
             );
-            
+
             // Update reporter status to completed
             acceptedReporter.status = "completed";
             if (acceptedReporter.proof) {
@@ -1337,22 +1337,22 @@ const completePaidConference = async (req, res) => {
 const processRefundToPressUser = async (userId, refundAmount, conferenceId, refundReason) => {
   const mongoose = require('mongoose');
   const session = await mongoose.startSession();
-  
+
   try {
     session.startTransaction();
-    
+
     console.log(`Processing refund to press user wallet:
       User ID: ${userId}
       Refund Amount: ₹${refundAmount}
       Conference ID: ${conferenceId}
       Reason: ${refundReason}`);
-    
+
     // Find or create press user's wallet within transaction
     let wallet = await Wallet.findOne({
       userId: userId,
       userType: "PressConferenceUser"
     }).session(session);
-    
+
     if (!wallet) {
       wallet = new Wallet({
         userId: userId,
@@ -1361,11 +1361,11 @@ const processRefundToPressUser = async (userId, refundAmount, conferenceId, refu
         transactions: []
       });
     }
-    
+
     // Credit refund amount to wallet
     const previousBalance = wallet.balance || 0;
     const newBalance = Number(previousBalance) + Number(refundAmount);
-    
+
     // Add transaction record
     const transactionRecord = {
       type: "credit",
@@ -1377,20 +1377,20 @@ const processRefundToPressUser = async (userId, refundAmount, conferenceId, refu
       conferenceId: conferenceId,
       refundType: "incomplete_conference"
     };
-    
+
     wallet.balance = newBalance;
     wallet.transactions.push(transactionRecord);
-    
+
     await wallet.save({ session });
-    
+
     await session.commitTransaction();
-    
+
     console.log(`✅ Press user wallet refunded successfully:
       Previous Balance: ₹${previousBalance}
       Refund Amount: ₹${refundAmount}
       New Balance: ₹${newBalance}
       Transaction ID: ${transactionRecord.transactionId}`);
-    
+
     return {
       success: true,
       previousBalance: previousBalance,
@@ -1398,7 +1398,7 @@ const processRefundToPressUser = async (userId, refundAmount, conferenceId, refu
       transactionId: transactionRecord.transactionId,
       refundAmount: refundAmount
     };
-    
+
   } catch (error) {
     await session.abortTransaction();
     console.error("❌ Error processing refund to press user wallet, transaction rolled back:", error);
@@ -1412,21 +1412,21 @@ const processRefundToPressUser = async (userId, refundAmount, conferenceId, refu
 const creditReporterWallet = async (reporterId, amount, conferenceId) => {
   const mongoose = require('mongoose');
   const session = await mongoose.startSession();
-  
+
   try {
     session.startTransaction();
-    
+
     console.log(`Crediting reporter wallet with transaction:
       Reporter ID: ${reporterId}
       Amount: ₹${amount}
       Conference ID: ${conferenceId}`);
-    
+
     // Find or create reporter's wallet within transaction
     let wallet = await Wallet.findOne({
       userId: reporterId,
       userType: "Reporter"
     }).session(session);
-    
+
     if (!wallet) {
       wallet = new Wallet({
         userId: reporterId,
@@ -1435,11 +1435,11 @@ const creditReporterWallet = async (reporterId, amount, conferenceId) => {
         transactions: []
       });
     }
-    
+
     // 🔑 CRITICAL FIX: Use atomic operation to prevent race conditions
     const previousBalance = wallet.balance || 0;
     const newBalance = Number(previousBalance) + Number(amount);
-    
+
     // Add transaction record
     const transactionRecord = {
       type: "credit",
@@ -1449,27 +1449,27 @@ const creditReporterWallet = async (reporterId, amount, conferenceId) => {
       date: new Date(),
       transactionId: `TXN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     };
-    
+
     wallet.balance = newBalance;
     wallet.transactions.push(transactionRecord);
-    
+
     await wallet.save({ session });
-    
+
     await session.commitTransaction();
-    
+
     console.log(`✅ Reporter wallet credited successfully with transaction:
       Previous Balance: ₹${previousBalance}
       Credit Amount: ₹${amount}
       New Balance: ₹${newBalance}
       Transaction ID: ${transactionRecord.transactionId}`);
-    
+
     return {
       success: true,
       previousBalance: previousBalance,
       newBalance: newBalance,
       transactionId: transactionRecord.transactionId
     };
-    
+
   } catch (error) {
     await session.abortTransaction();
     console.error("❌ Error crediting reporter wallet, transaction rolled back:", error);
@@ -1514,7 +1514,7 @@ const rejectPaidConferenceProof = async (req, res) => {
     }
 
     const reporter = conference.acceptedReporters[reporterIndex];
-    
+
     // Check if proof exists
     if (!reporter.proof) {
       return res.status(400).json({
@@ -1522,7 +1522,7 @@ const rejectPaidConferenceProof = async (req, res) => {
         message: "No proof found for this reporter"
       });
     }
-    
+
     // Check if proof is already approved
     if (reporter.proof?.status === "approved") {
       return res.status(400).json({
@@ -1536,10 +1536,10 @@ const rejectPaidConferenceProof = async (req, res) => {
     conference.acceptedReporters[reporterIndex].proof.adminNote = rejectReason;
     conference.acceptedReporters[reporterIndex].proof.rejectedAt = new Date();
     conference.acceptedReporters[reporterIndex].proof.rejectedBy = adminId;
-    
+
     // 🔑 CRITICAL FIX: Clear idempotency key so proof can be re-approved
     conference.acceptedReporters[reporterIndex].proof.idempotencyKey = undefined;
-    
+
     // Mark proof as not submitted after rejection
     conference.acceptedReporters[reporterIndex].proofSubmitted = false;
 
@@ -1572,7 +1572,7 @@ const getPaidConferenceDetails = async (req, res) => {
     }
 
     const conference = await PaidConference.findOne({ conferenceId })
-      .populate('submittedBy', 'name email')
+      .populate('submittedBy', 'name email organization pressConferenceId')
       .populate('acceptedReporters.reporterId', 'name email iinsafId city state');
 
     if (!conference) {
@@ -1638,45 +1638,45 @@ const getCompletedPaidConferences = async (req, res) => {
     // Debug: Check total conferences first
     const totalConferences = await PaidConference.countDocuments({});
     console.log(`Total paid conferences in database: ${totalConferences}`);
-    
+
     // Debug: Check conferences with different statuses
     const statusCounts = await PaidConference.aggregate([
       { $group: { _id: "$status", count: { $sum: 1 } } }
     ]);
     console.log("Conference status counts:", statusCounts);
-    
+
     // Debug: Check conferences with approved proofs
     const conferencesWithApprovedProofs = await PaidConference.countDocuments({
       "acceptedReporters.proofSubmitted": true,
       "acceptedReporters.proof.status": "approved"
     });
     console.log(`Conferences with approved proofs: ${conferencesWithApprovedProofs}`);
-    
+
     // For debugging: Get all conferences first, then filter
     const allConferences = await PaidConference.find({})
-      .populate("submittedBy", "name email")
+      .populate("submittedBy", "name email organization pressConferenceId")
       .populate("acceptedReporters.reporterId", "name email iinsafId state city organization")
       .sort({ createdAt: -1 });
-    
+
     console.log(`Total conferences fetched: ${allConferences.length}`);
-    
+
     // Filter conferences that have approved proofs
     const completedConferences = allConferences.filter(conference => {
-      const hasApprovedProofs = conference.acceptedReporters?.some(reporter => 
+      const hasApprovedProofs = conference.acceptedReporters?.some(reporter =>
         reporter.proofSubmitted && reporter.proof?.status === "approved"
       );
       const isCompleted = conference.status === "completed";
-      
+
       console.log(`Conference ${conference.conferenceId}:`, {
         status: conference.status,
         hasApprovedProofs,
         isCompleted,
         acceptedReporters: conference.acceptedReporters?.length || 0
       });
-      
+
       return hasApprovedProofs || isCompleted;
     });
-    
+
     console.log(`Found ${completedConferences.length} completed conferences after filtering`);
 
     // Get total count for pagination (simplified for debugging)
@@ -1685,7 +1685,7 @@ const getCompletedPaidConferences = async (req, res) => {
     // Process each completed conference
     const processedConferences = await Promise.all(completedConferences.map(async (conference) => {
       const acceptedReporters = conference.acceptedReporters || [];
-      
+
       // Get completed reporters (those with approved proofs)
       const completedReporters = acceptedReporters
         .filter(reporter => {
@@ -1772,18 +1772,18 @@ const getCompletedPaidConferences = async (req, res) => {
       const totalCompletedReporters = completedReporters.length;
       const totalAcceptedReporters = acceptedButNotCompleted.length;
       const totalRejectedReporters = rejectedReporters.length;
-      
+
       // Calculate total targeted users (will be updated after fetching all targeted users)
       let totalTargetedUsers = 0;
       let totalNeverRespondedUsers = 0;
-      
+
       // Calculate completion ratio
-      const completionRatio = totalRequiredReporters > 0 ? 
-        `${totalCompletedReporters}/${totalRequiredReporters}` : 
+      const completionRatio = totalRequiredReporters > 0 ?
+        `${totalCompletedReporters}/${totalRequiredReporters}` :
         `${totalCompletedReporters}/${totalReporters}`;
-      
-      const completionPercentage = totalRequiredReporters > 0 ? 
-        ((totalCompletedReporters / totalRequiredReporters) * 100).toFixed(1) : 
+
+      const completionPercentage = totalRequiredReporters > 0 ?
+        ((totalCompletedReporters / totalRequiredReporters) * 100).toFixed(1) :
         (totalReporters > 0 ? ((totalCompletedReporters / totalReporters) * 100).toFixed(1) : 0);
 
       // Proof statistics
@@ -1821,7 +1821,7 @@ const getCompletedPaidConferences = async (req, res) => {
         completionRatio,
         // Include refund details if they exist
         refundDetails: conference.refundDetails || null,
-        
+
         // Debug: Log refund details
         debugRefundDetails: conference.refundDetails ? {
           refundAmount: conference.refundDetails.refundAmount,
@@ -1851,11 +1851,11 @@ const getCompletedPaidConferences = async (req, res) => {
               verifiedReporter: true,
               state: { $in: conference.adminSelectState }
             };
-            
+
             if (conference.adminSelectCities && conference.adminSelectCities.length > 0) {
               query.city = { $in: conference.adminSelectCities };
             }
-            
+
             allTargetedReporters = await User.find(query).select("name email mobile iinsafId state city organization");
           } else if (conference.adminSelectCities && conference.adminSelectCities.length > 0) {
             // Admin selected cities
@@ -1881,11 +1881,11 @@ const getCompletedPaidConferences = async (req, res) => {
           // Create maps for quick lookup
           const acceptedReporterMap = {};
           const rejectedReporterMap = {};
-          
+
           acceptedReporters.forEach(reporter => {
             acceptedReporterMap[reporter.reporterId.toString()] = reporter;
           });
-          
+
           rejectedReporters.forEach(reporter => {
             rejectedReporterMap[reporter.reporterId.toString()] = reporter;
           });
@@ -1894,7 +1894,7 @@ const getCompletedPaidConferences = async (req, res) => {
           return allTargetedReporters.map(reporter => {
             const acceptedReporter = acceptedReporterMap[reporter._id.toString()];
             const rejectedReporter = rejectedReporterMap[reporter._id.toString()];
-            
+
             let workStatus = {
               status: "pending",
               acceptedAt: null,
@@ -1904,7 +1904,7 @@ const getCompletedPaidConferences = async (req, res) => {
               proofSubmitted: false,
               lastUpdated: null
             };
-            
+
             let proofDetails = null;
 
             if (acceptedReporter) {
@@ -1917,7 +1917,7 @@ const getCompletedPaidConferences = async (req, res) => {
                 proofSubmitted: acceptedReporter.proofSubmitted,
                 lastUpdated: acceptedReporter.updatedAt
               };
-              
+
               if (acceptedReporter.proof) {
                 proofDetails = {
                   channelName: acceptedReporter.proof.channelName,
@@ -1956,9 +1956,9 @@ const getCompletedPaidConferences = async (req, res) => {
               proofDetails,
               metadata: {
                 hasConferenceInPanel: true,
-                responseTime: workStatus.acceptedAt ? 
+                responseTime: workStatus.acceptedAt ?
                   Math.round((new Date(workStatus.acceptedAt) - new Date(conference.createdAt)) / (1000 * 60 * 60 * 24)) : null, // days
-                completionTime: workStatus.completedAt ? 
+                completionTime: workStatus.completedAt ?
                   Math.round((new Date(workStatus.completedAt) - new Date(workStatus.acceptedAt)) / (1000 * 60 * 60 * 24)) : null // days
               }
             };
@@ -1993,7 +1993,7 @@ const getCompletedPaidConferences = async (req, res) => {
 const getCompletionDetails = async (req, res) => {
   try {
     const { conferenceId } = req.params;
-    
+
     if (!conferenceId) {
       return res.status(400).json({
         success: false,
@@ -2002,8 +2002,8 @@ const getCompletionDetails = async (req, res) => {
     }
 
     const conference = await PaidConference.findOne({ conferenceId })
-      .populate('submittedBy', 'name email');
-      
+      .populate('submittedBy', 'name email organization pressConferenceId');
+
     if (!conference) {
       return res.status(404).json({
         success: false,
@@ -2012,23 +2012,23 @@ const getCompletionDetails = async (req, res) => {
     }
 
     // Count completed reporters
-    const completedReporters = conference.acceptedReporters.filter(r => 
+    const completedReporters = conference.acceptedReporters.filter(r =>
       r.proofSubmitted && r.proof?.status === 'approved'
     );
 
     const requiredReporters = conference.numberOfReporters;
     const actualCompleted = completedReporters.length;
-    const amountPerReporter = conference.commissionDetails?.amountPerReporter || 
-                             (conference.paymentAmount / requiredReporters);
-    
+    const amountPerReporter = conference.commissionDetails?.amountPerReporter ||
+      (conference.paymentAmount / requiredReporters);
+
     // Calculate payment distribution
     const totalToReporters = actualCompleted * amountPerReporter;
-    
+
     // Calculate refund if needed
     const shortfall = requiredReporters - actualCompleted;
     const refundAmount = shortfall > 0 ? shortfall * amountPerReporter : 0;
     const willRefund = refundAmount > 0;
-    
+
     const completionDetails = {
       conferenceId: conference.conferenceId,
       topic: conference.topic,
@@ -2040,8 +2040,8 @@ const getCompletionDetails = async (req, res) => {
       willRefund: willRefund,
       refundAmount: refundAmount,
       shortfallReporters: shortfall,
-      refundReason: willRefund ? 
-        `Incomplete conference: ${actualCompleted}/${requiredReporters} reporters completed` : 
+      refundReason: willRefund ?
+        `Incomplete conference: ${actualCompleted}/${requiredReporters} reporters completed` :
         null,
       pressUserName: conference.submittedBy?.name || 'N/A',
       pressUserEmail: conference.submittedBy?.email || 'N/A',
@@ -2066,21 +2066,21 @@ const getCompletionDetails = async (req, res) => {
 const debugPaidConferences = async (req, res) => {
   try {
     const PaidConference = require("../../models/pressConference/paidConference");
-    
+
     // Get all conferences
     const allConferences = await PaidConference.find({})
       .populate("submittedBy", "name email")
       .populate("acceptedReporters.reporterId", "name email iinsafId state city organization");
-    
+
     console.log(`Total conferences in database: ${allConferences.length}`);
-    
+
     // Analyze each conference
     const analysis = allConferences.map(conference => {
       const acceptedReporters = conference.acceptedReporters || [];
-      const approvedProofs = acceptedReporters.filter(reporter => 
+      const approvedProofs = acceptedReporters.filter(reporter =>
         reporter.proofSubmitted && reporter.proof?.status === "approved"
       );
-      
+
       return {
         conferenceId: conference.conferenceId,
         status: conference.status,
@@ -2097,7 +2097,7 @@ const debugPaidConferences = async (req, res) => {
         }))
       };
     });
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -2148,7 +2148,7 @@ const manuallyCompleteConference = async (req, res) => {
     const acceptedReporters = conference.acceptedReporters || [];
 
     // Count completed reporters
-    const completedReporters = acceptedReporters.filter(r => 
+    const completedReporters = acceptedReporters.filter(r =>
       r.proofSubmitted && r.proof?.status === 'approved'
     );
 
@@ -2168,11 +2168,11 @@ const manuallyCompleteConference = async (req, res) => {
 
     if (actualCompleted < requiredReporters) {
       const shortfall = requiredReporters - actualCompleted;
-      const amountPerReporter = conference.commissionDetails?.amountPerReporter || 
-                               (conference.paymentAmount / requiredReporters);
-      
+      const amountPerReporter = conference.commissionDetails?.amountPerReporter ||
+        (conference.paymentAmount / requiredReporters);
+
       refundAmount = shortfall * amountPerReporter;
-      
+
       console.log(`Refund calculation:`, {
         shortfall: shortfall,
         amountPerReporter: amountPerReporter,
@@ -2185,8 +2185,8 @@ const manuallyCompleteConference = async (req, res) => {
       // Process refund to press user's wallet only if admin chose to refund
       if (refundAmount > 0 && shouldRefund) {
         refundDetails = await processRefundToPressUser(
-          conference.submittedBy, 
-          refundAmount, 
+          conference.submittedBy,
+          refundAmount,
           conference.conferenceId,
           `Refund for incomplete conference: ${shortfall} reporter(s) short`
         );
@@ -2197,7 +2197,7 @@ const manuallyCompleteConference = async (req, res) => {
     }
 
     // Auto-reject reporters who didn't submit proofs
-    const incompleteReporters = acceptedReporters.filter(reporter => 
+    const incompleteReporters = acceptedReporters.filter(reporter =>
       !reporter.proofSubmitted || reporter.proof?.status !== "approved"
     );
 
@@ -2224,7 +2224,7 @@ const manuallyCompleteConference = async (req, res) => {
     });
 
     // Remove incomplete reporters from acceptedReporters array
-    conference.acceptedReporters = conference.acceptedReporters.filter(reporter => 
+    conference.acceptedReporters = conference.acceptedReporters.filter(reporter =>
       reporter.proofSubmitted && reporter.proof?.status === "approved"
     );
 
@@ -2243,12 +2243,12 @@ const manuallyCompleteConference = async (req, res) => {
         shortfallReporters: requiredReporters - actualCompleted,
         refundProcessed: true
       };
-      
+
       console.log(`Refund data to be saved:`, refundData);
       console.log(`Refund details from processRefundToPressUser:`, refundDetails);
-      
+
       conference.refundDetails = refundData;
-      
+
       console.log(`Conference refundDetails after assignment:`, conference.refundDetails);
     } else if (refundAmount > 0 && !shouldRefund) {
       // Store that refund was eligible but admin chose not to refund
@@ -2261,13 +2261,13 @@ const manuallyCompleteConference = async (req, res) => {
         refundProcessed: false,
         adminDecision: "no_refund"
       };
-      
+
       conference.refundDetails = refundData;
       console.log(`Refund skipped by admin choice - details saved:`, refundData);
     }
 
     await conference.save();
-    
+
     // Debug: Check if refund details were saved correctly
     const savedConference = await PaidConference.findOne({ conferenceId });
     console.log(`Saved conference refundDetails:`, savedConference.refundDetails);

@@ -13,6 +13,7 @@ const { getRaiseYourVoiceUsers,
   getTotalAdvertisers,
   getUnverifiedReporters } = require("../../../controller/admin/adminDashboardStats/adminGetAllUsersOnDashboard")
 const { adminUpdateUser, adminDeleteUser } = require("../../../controller/admin/adminUserManagement/userManagementController");
+const { getAllPressConferenceUsers } = require("../../../controller/admin/adminPressConferenceUsers/getPressConferenceUsers");
 
 
 // for dashboard stats
@@ -66,6 +67,9 @@ router.get("/super/admin/get/all/unverified/reporters", getUnverifiedReporters);
 // ✅ User Management Routes (Edit/Delete)
 router.put("/admin/user/update/:id", adminAuthenticate, isSuperAdmin, adminUpdateUser);
 router.delete("/admin/user/delete/:id", adminAuthenticate, isSuperAdmin, adminDeleteUser);
+
+// ✅ Press Conference Users
+router.get("/admin/press-conference/users", adminAuthenticate, isSuperAdmin, getAllPressConferenceUsers);
 
 
 
