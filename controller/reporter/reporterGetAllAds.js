@@ -108,7 +108,7 @@ const reporterGetAllAds = async (req, res) => {
     // ✅ Additional check: Verify ID card status is actually "Approved"
     const genrateIdCard = require("../../models/reporterIdGenrate/genrateIdCard");
     const idCard = await genrateIdCard.findOne({ reporter: reporterId });
-    
+
     if (!idCard || idCard.status !== "Approved") {
       const userType = reporter.role === "Influencer" ? "influencer" : "reporter";
       return res.status(403).json({
@@ -120,9 +120,11 @@ const reporterGetAllAds = async (req, res) => {
 
     const { state: reporterState, city: reporterCity } = reporter;
 
-    // Step 3: Fetch all approved and modified ads
-    const allApprovedAds = await Adpost.find({ 
-      status: { $in: ["approved", "modified"] } 
+    // Step 3: Fetch all approved and modified ads that have not expired
+    const now = new Date();
+    const allApprovedAds = await Adpost.find({
+      status: { $in: ["approved", "modified"] },
+      acceptBefore: { $gt: now } // ✅ Only show ads where acceptance deadline is in the future
     });
 
     // Step 4: Filter ads according to strict priority
@@ -134,10 +136,10 @@ const reporterGetAllAds = async (req, res) => {
       // Filter by user type - only show ads that match the user's role
       const userRole = reporter.role; // "Reporter" or "Influencer"
       const adUserType = ad.userType; // "reporter" or "influencer"
-      
+
       // Convert user role to match ad userType format
       const expectedUserType = userRole === "Influencer" ? "influencer" : "reporter";
-      
+
       // Only show ads that match the user's type
       if (adUserType !== expectedUserType) {
         return false;
@@ -150,12 +152,12 @@ const reporterGetAllAds = async (req, res) => {
       const reporterEntry = ad.acceptRejectReporterList?.find(
         (e) => e.reporterId?.toString() === reporterId.toString()
       );
-      
+
       // If reporter is not in the list at all, don't show the ad
       if (!reporterEntry) {
         return false;
       }
-      
+
       // ✅ Use postStatus instead of accepted field
       // If reporter has already responded (not pending), don't show the ad
       if (reporterEntry.postStatus && reporterEntry.postStatus !== "pending") {

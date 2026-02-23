@@ -115,7 +115,7 @@ const sendOtpViaSMS = async (mobile, otp, userName) => {
     console.error("Error Message:", error.message);
     console.error("Error Status:", error?.response?.status);
     console.error("================================");
-    
+
     throw new Error("Failed to send WhatsApp OTP");
   }
 };
@@ -123,7 +123,7 @@ const sendOtpViaSMS = async (mobile, otp, userName) => {
 
 const sendOtpViaEmail = async (email, otp, userName) => {
   const emailHtml = getOtpTemplate(userName || "User", otp, "verify your email address for registration", 10);
-  
+
   await sendEmail(
     email,
     "Email Verification OTP - iinsaf Platform",
@@ -137,13 +137,13 @@ const sendOtpViaEmail = async (email, otp, userName) => {
 
 const verifyOtp = async (req, res) => {
   console.log("🔍 OTP Verification Debug - Request body:", req.body);
-  
+
   const { email, mobile, otpEmail, otpMobile } = req.body;
   // Normalize identifiers to avoid key mismatches due to casing/whitespace
   const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : email;
   const normalizedMobile = typeof mobile === 'string' ? mobile.trim() : mobile;
   const key = `${normalizedEmail}|${normalizedMobile}`;
-  
+
   console.log("🔍 OTP Verification Debug - Key:", key);
   console.log("🔍 OTP Verification Debug - Pending registrations keys:", Array.from(pendingRegistrations.keys()));
 
@@ -158,26 +158,32 @@ const verifyOtp = async (req, res) => {
   }
 
   const { emailOtp, mobileOtp, otpExpiry } = userData;
-  
+
   console.log("🔍 OTP Verification Debug - Stored OTPs:");
   console.log("  - emailOtp:", emailOtp, "Type:", typeof emailOtp);
   console.log("  - mobileOtp:", mobileOtp, "Type:", typeof mobileOtp);
   console.log("  - otpExpiry:", otpExpiry, "Current time:", Date.now());
-  
+
   console.log("🔍 OTP Verification Debug - Received OTPs:");
   console.log("  - otpEmail:", otpEmail, "Type:", typeof otpEmail);
   console.log("  - otpMobile:", otpMobile, "Type:", typeof otpMobile);
-  
-  const isEmailOtpValid = emailOtp === otpEmail?.toString().trim();
-  const isMobileOtpValid = mobileOtp === otpMobile?.toString().trim();
+
+  // We are requiring the entered OTP to match EITHER the sent Email OTP or the Mobile OTP
+  // since the sender might use one box for both.
+  const enteredOtp = otpEmail?.toString().trim();
+  const isEmailOtpValid = emailOtp === enteredOtp;
+  const isMobileOtpValid = mobileOtp === enteredOtp;
+
+  const isOtpValid = isEmailOtpValid || isMobileOtpValid;
   const isOtpExpired = Date.now() > otpExpiry;
-  
+
   console.log("🔍 OTP Verification Debug - Validation results:");
-  console.log("  - isEmailOtpValid:", isEmailOtpValid);
-  console.log("  - isMobileOtpValid:", isMobileOtpValid);
+  console.log("  - Entered OTP:", enteredOtp);
+  console.log("  - matches email OTP?:", isEmailOtpValid);
+  console.log("  - matches mobile OTP?:", isMobileOtpValid);
   console.log("  - isOtpExpired:", isOtpExpired);
 
-  if (!isEmailOtpValid || !isMobileOtpValid || isOtpExpired) {
+  if (!isOtpValid || isOtpExpired) {
     console.log("❌ OTP validation failed");
     return res.status(400).json({ msg: "Invalid or expired OTP" });
   }
@@ -224,8 +230,8 @@ const verifyOtp = async (req, res) => {
       success: true,
       msg: "OTP verified successfully. You are now registered.",
       iinsafId: userData_toSave.iinsafId || null,
-      message: userData.role === "Advertiser" 
-        ? "Your Advertiser ID has been generated." 
+      message: userData.role === "Advertiser"
+        ? "Your Advertiser ID has been generated."
         : "Your ID will be assigned after verification.",
     });
   } catch (err) {
@@ -320,13 +326,13 @@ const preRegisterUser = async (req, res) => {
       emailOtp,
       otpExpiry,
     };
-    
+
     // Normalize identifiers for consistent keying
     const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : email;
     const normalizedMobile = typeof mobile === 'string' ? mobile.trim() : mobile;
     const key = `${normalizedEmail}|${normalizedMobile}`;
     pendingRegistrations.set(key, registrationData);
-    
+
     console.log("🔍 Pre-registration Debug - Stored data:");
     console.log("  - Key:", key);
     console.log("  - mobileOtp:", mobileOtp, "Type:", typeof mobileOtp);
@@ -336,7 +342,11 @@ const preRegisterUser = async (req, res) => {
 
     // ✅ Send OTPs
     await sendOtpViaEmail(email, emailOtp, name.trim());
-    await sendOtpViaSMS(mobile, mobileOtp, name.trim());
+    try {
+      await sendOtpViaSMS(mobile, mobileOtp, name.trim());
+    } catch (e) {
+      console.log("Ignoring WhatsApp failure. Proceeding with Email OTP.");
+    }
 
     return res.status(200).json({
       success: true,
@@ -387,7 +397,11 @@ const resendOtp = async (req, res) => {
 
     // Send OTPs again
     await sendOtpViaEmail(email, newEmailOtp, userData.name);
-    await sendOtpViaSMS(mobile, newMobileOtp, userData.name);
+    try {
+      await sendOtpViaSMS(mobile, newMobileOtp, userData.name);
+    } catch (e) {
+      console.log("Ignoring WhatsApp failure on resend.");
+    }
 
     return res.status(200).json({
       success: true,
@@ -407,7 +421,7 @@ const resendOtp = async (req, res) => {
 const testOtpSending = async (req, res) => {
   try {
     const { mobile, userName } = req.body;
-    
+
     if (!mobile) {
       return res.status(400).json({
         success: false,
@@ -417,12 +431,12 @@ const testOtpSending = async (req, res) => {
 
     // Generate a test OTP
     const testOtp = "123456";
-    
+
     console.log(`🧪 Testing OTP sending to ${mobile} for user ${userName || "Test User"}`);
-    
+
     // Test the OTP sending
     await sendOtpViaSMS(mobile, testOtp, userName || "Test User");
-    
+
     res.status(200).json({
       success: true,
       message: "Test OTP sent successfully",
@@ -430,7 +444,7 @@ const testOtpSending = async (req, res) => {
       mobile: mobile,
       userName: userName || "Test User"
     });
-    
+
   } catch (error) {
     console.error("Test OTP sending error:", error);
     res.status(500).json({
@@ -446,7 +460,7 @@ const testPendingRegistrations = async (req, res) => {
   try {
     const allKeys = Array.from(pendingRegistrations.keys());
     const allData = {};
-    
+
     for (const key of allKeys) {
       const data = pendingRegistrations.get(key);
       allData[key] = {
@@ -460,7 +474,7 @@ const testPendingRegistrations = async (req, res) => {
         isExpired: Date.now() > data.otpExpiry
       };
     }
-    
+
     return res.status(200).json({
       success: true,
       message: "Pending registrations retrieved",
@@ -477,4 +491,4 @@ const testPendingRegistrations = async (req, res) => {
   }
 };
 
-module.exports = { preRegisterUser, verifyOtp, sendOtpViaSMS, sendOtpViaEmail, resendOtp, testOtpSending, testPendingRegistrations};
+module.exports = { preRegisterUser, verifyOtp, sendOtpViaSMS, sendOtpViaEmail, resendOtp, testOtpSending, testPendingRegistrations };

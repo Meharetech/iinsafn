@@ -124,6 +124,7 @@ const createPaidConferenceOrder = async (req, res) => {
         order_id: order.id,
         currency: order.currency,
         amount: order.amount,
+        key: process.env.RAZORPAY_KEY_ID,
         pricing: {
           numberOfReporters,
           reporterPrice,

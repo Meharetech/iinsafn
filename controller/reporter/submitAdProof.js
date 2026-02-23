@@ -283,11 +283,33 @@ const reporterGetRunningAds = async (req, res) => {
     console.log("🔍 Found running ads:", runningAds.length);
 
     // 2. Filter proofs to include only the current reporter's entry (pending, submitted, or rejected)
-    const filteredAds = runningAds.map((doc) => {
+    // 2. Filter proofs and join with Adpost to get acceptance time
+    const filteredAds = await Promise.all(runningAds.map(async (doc) => {
       const reporterProof = doc.proofs.find(
         (proof) => proof.reporterId.toString() === reporterId.toString() &&
           ["pending", "approved", "submitted", "rejected"].includes(proof.status)
       );
+
+      // Fetch the ad details to get acceptedAt
+      const adDetails = await Adpost.findById(doc.adId);
+      const reporterEntry = adDetails?.acceptRejectReporterList?.find(
+        r => r.reporterId.toString() === reporterId.toString()
+      );
+
+      const acceptedAt = reporterEntry?.acceptedAt;
+      const expiresAt = acceptedAt ? new Date(new Date(acceptedAt).getTime() + (72 * 60 * 60 * 1000)) : null;
+
+      // Calculate if the task is expired.
+      // A task is expired if it's NOT submitted and the current time is beyond expiresAt.
+      // If submitted, it depends on whether it was submitted BEFORE expiresAt.
+      const isSubmitted = reporterProof && ["submitted", "proof_submitted", "completed"].includes(reporterProof.status);
+      const submissionTime = reporterProof?.completionSubmittedAt || reporterProof?.submittedAt;
+
+      const isExpired = expiresAt ? (
+        isSubmitted
+          ? (submissionTime ? new Date(submissionTime) > expiresAt : false)
+          : new Date() > expiresAt
+      ) : false;
 
       return {
         _id: doc._id,
@@ -298,15 +320,29 @@ const reporterGetRunningAds = async (req, res) => {
         runningAdStatus: doc.runningAdStatus,
         requiredReporter: doc.requiredReporter,
         proofs: reporterProof ? [reporterProof] : [],
+        expiresAt: expiresAt,
+        isExpired: isExpired
       };
+    }));
+
+    // 3. Filter out expired ads that are NOT yet submitted for review
+    const finalFilteredAds = filteredAds.filter(ad => {
+      const proof = ad.proofs[0];
+      // If it's already submitted by the reporter, keep it in running (waiting for admin review)
+      if (proof && ["submitted", "completed", "proof_submitted"].includes(proof.status)) {
+        // Only keep if it wasn't expired at time of submission (or we can just keep all submitted for review)
+        return true;
+      }
+      // If it's not submitted and is expired, filter it out
+      return !ad.isExpired;
     });
 
-    console.log("🔍 Filtered Running Ads Data:", filteredAds);
+    console.log("🔍 Final Running Ads Count (after expiry filter):", finalFilteredAds.length);
 
     res.status(200).json({
       success: true,
-      message: "Running ads fetched successfully (includes pending, approved, submitted, and rejected proofs).",
-      data: filteredAds,
+      message: "Running ads fetched successfully (excluding expired unsubmitted tasks).",
+      data: finalFilteredAds,
     });
   } catch (error) {
     console.error("Error fetching running ads:", error);

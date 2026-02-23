@@ -37,6 +37,7 @@ const adsPayment = async (req, res) => {
       order_id: order.id,
       currency: order.currency,
       amount: order.amount,
+      key: process.env.RAZORPAY_KEY_ID,
     });
   } catch (error) {
     console.error("Error creating Razorpay order:", error);
@@ -68,9 +69,9 @@ const successOrNot = async (req, res) => {
       // Fetch current GST rate from pricing settings
       const pricing = await AdPricing.findOne().sort({ createdAt: -1 });
       const gstRate = pricing?.gstRate || 0; // Default to 0 if not set
-      
+
       const totalAmount = payment.amount / 100; // Razorpay returns in paise
-      
+
       // Calculate GST: if total includes GST, reverse-calculate
       // Formula: total = subtotal + (subtotal * gstRate/100)
       // So: subtotal = total / (1 + gstRate/100)
@@ -80,7 +81,7 @@ const successOrNot = async (req, res) => {
         const subtotal = totalAmount / (1 + gstRate / 100);
         gstAmount = totalAmount - subtotal;
       }
-      
+
       const newHistory = new paymentHistory({
         user: userId,
         paymentId: paymentId,
@@ -139,10 +140,10 @@ const payFromWallet = async (req, res) => {
     // Fetch current GST rate from pricing settings
     const pricing = await AdPricing.findOne().sort({ createdAt: -1 });
     const gstRate = (pricing?.gstRate || 0) / 100; // Convert percentage to decimal
-    
+
     // generate paymentId
     const paymentId = generatePaymentId();
-    
+
     // Calculate GST: if amount includes GST, reverse-calculate
     // Formula: amount = subtotal + (subtotal * gstRate)
     // So: subtotal = amount / (1 + gstRate)
@@ -248,7 +249,12 @@ const walletTopUp = async (req, res) => {
 
   try {
     const order = await razorpay.orders.create(options);
-    res.status(200).json({ order_id: order.id, currency: order.currency, amount: order.amount });
+    res.status(200).json({
+      order_id: order.id,
+      currency: order.currency,
+      amount: order.amount,
+      key: process.env.RAZORPAY_KEY_ID,
+    });
   } catch (error) {
     console.error("Error creating wallet order:", error);
     res.status(500).json({ error: "Failed to create wallet order" });
@@ -333,4 +339,4 @@ const walletPaymentSuccess = async (req, res) => {
 };
 
 
-module.exports = { adsPayment, successOrNot, payFromWallet, walletTopUp, walletPaymentSuccess};
+module.exports = { adsPayment, successOrNot, payFromWallet, walletTopUp, walletPaymentSuccess };

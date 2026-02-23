@@ -56,21 +56,21 @@ const getAcceptedAds = async (req, res) => {
 
     // ✅ Step 4: Fetch full ad details for approved proofs where postStatus is "accepted"
     // This ensures we only show ads where user can submit final proof
-    const approvedAds = approvedAdIds.length > 0 
-      ? await Adpost.find({ 
-          _id: { $in: approvedAdIds },
-          acceptRejectReporterList: {
-            $elemMatch: {
-              reporterId: reporterId,
-              postStatus: "accepted" // ✅ Only show if postStatus is "accepted" (not "submitted" or "proof_submitted")
-            }
+    const approvedAds = approvedAdIds.length > 0
+      ? await Adpost.find({
+        _id: { $in: approvedAdIds },
+        acceptRejectReporterList: {
+          $elemMatch: {
+            reporterId: reporterId,
+            postStatus: "accepted" // ✅ Only show if postStatus is "accepted" (not "submitted" or "proof_submitted")
           }
-        })
+        }
+      })
       : [];
 
     // ✅ Step 5: Combine both sets of ads (avoid duplicates)
     const allAdsMap = new Map();
-    
+
     // Add matched ads (accepted but no proof submitted)
     matchedAds.forEach(ad => {
       allAdsMap.set(ad._id.toString(), ad);
@@ -86,7 +86,7 @@ const getAcceptedAds = async (req, res) => {
     // ✅ Step 6: Enhanced response with rejection information for initial proofs and proof data
     const enhancedAds = allAds.map(ad => {
       const reporterEntry = ad.acceptRejectReporterList.find(r => r.reporterId.toString() === reporterId.toString());
-      
+
       // Find proof data if exists
       const proofDoc = approvedProofAds.find(doc => doc.adId.toString() === ad._id.toString());
       const proofData = proofDoc?.proofs?.find(p => p.reporterId.toString() === reporterId.toString() && p.status === "approved");
@@ -101,6 +101,13 @@ const getAcceptedAds = async (req, res) => {
           initialProofRejectNote: reporterEntry?.initialProofRejectNote,
           initialProofRejectedAt: reporterEntry?.initialProofRejectedAt,
           initialProofRejectedByName: reporterEntry?.initialProofRejectedByName,
+          // ✅ Add deadline tracking (72 hours from acceptance)
+          expiresAt: reporterEntry?.acceptedAt
+            ? new Date(new Date(reporterEntry.acceptedAt).getTime() + (72 * 60 * 60 * 1000))
+            : null,
+          isExpired: reporterEntry?.acceptedAt
+            ? new Date() > new Date(new Date(reporterEntry.acceptedAt).getTime() + (72 * 60 * 60 * 1000))
+            : false
         },
         // ✅ Include proof data if initial proof was approved
         proofs: proofData ? [proofData] : [],
@@ -117,10 +124,13 @@ const getAcceptedAds = async (req, res) => {
       };
     });
 
+    // ✅ Step 7: Filter out expired ads
+    const finalAds = enhancedAds.filter(ad => !ad.reporterEntry?.isExpired);
+
     res.status(200).json({
       success: true,
       message: "Ads fetched where reporter has accepted (or initial proof approved) and can proceed with task",
-      data: enhancedAds
+      data: finalAds
     });
 
   } catch (error) {
@@ -133,74 +143,74 @@ const getAcceptedAds = async (req, res) => {
 };
 
 
-const getRejectedAds = async(req,res)=>{
-    try {
-        const reporterId = req.user._id;
-        const User = require("../../models/userModel/userModel");
-        const genrateIdCard = require("../../models/reporterIdGenrate/genrateIdCard");
+const getRejectedAds = async (req, res) => {
+  try {
+    const reporterId = req.user._id;
+    const User = require("../../models/userModel/userModel");
+    const genrateIdCard = require("../../models/reporterIdGenrate/genrateIdCard");
 
-        // ✅ VERIFICATION CHECK: Only verified users can access paid ads
-        const user = await User.findById(reporterId);
-        if (!user || !user.verifiedReporter) {
-            const userType = user?.role === "Influencer" ? "influencer" : "reporter";
-            return res.status(403).json({
-                success: false,
-                message: `You are not a verified ${userType}. Please apply for and get your ID card approved first to access paid advertisements.`,
-                data: []
-            });
-        }
-
-        // ✅ Additional check: Verify ID card status is actually "Approved"
-        const idCard = await genrateIdCard.findOne({ reporter: reporterId });
-        if (!idCard || idCard.status !== "Approved") {
-            const userType = user.role === "Influencer" ? "influencer" : "reporter";
-            return res.status(403).json({
-                success: false,
-                message: `Your ID card is not approved yet. Please wait for admin approval to access paid advertisements.`,
-                data: []
-            });
-        }
-
-        // Find ads rejected by this specific reporter
-        const matchedAds = await Adpost.find({
-            acceptRejectReporterList: {
-                $elemMatch: {
-                    reporterId: reporterId,
-                    postStatus: "rejected"
-                }
-            }
-        });
-
-        console.log("Found rejected ads for reporter:", matchedAds.length);
-
-        // Process ads to include reporter-specific rejection data
-        const processedAds = matchedAds.map(ad => {
-            // Find the current reporter's rejection data
-            const reporterRejection = ad.acceptRejectReporterList.find(
-                reporter => reporter.reporterId && reporter.reporterId.toString() === reporterId.toString() && reporter.postStatus === "rejected"
-            );
-            
-            return {
-                ...ad.toObject(),
-                rejectNote: reporterRejection?.rejectNote || "No reason provided",
-                rejectedAt: reporterRejection?.rejectedAt
-            };
-        });
-
-        res.status(200).json({
-            success: true,
-            message: "Ads fetched where reporter has responded",
-            data: processedAds
-        });
-
-    } catch (error) {
-        console.error("Error fetching rejected ads:", error);
-        res.status(500).json({
-            success: false,
-            message: "Server error while fetching ads"
-        });
+    // ✅ VERIFICATION CHECK: Only verified users can access paid ads
+    const user = await User.findById(reporterId);
+    if (!user || !user.verifiedReporter) {
+      const userType = user?.role === "Influencer" ? "influencer" : "reporter";
+      return res.status(403).json({
+        success: false,
+        message: `You are not a verified ${userType}. Please apply for and get your ID card approved first to access paid advertisements.`,
+        data: []
+      });
     }
+
+    // ✅ Additional check: Verify ID card status is actually "Approved"
+    const idCard = await genrateIdCard.findOne({ reporter: reporterId });
+    if (!idCard || idCard.status !== "Approved") {
+      const userType = user.role === "Influencer" ? "influencer" : "reporter";
+      return res.status(403).json({
+        success: false,
+        message: `Your ID card is not approved yet. Please wait for admin approval to access paid advertisements.`,
+        data: []
+      });
+    }
+
+    // Find ads rejected by this specific reporter
+    const matchedAds = await Adpost.find({
+      acceptRejectReporterList: {
+        $elemMatch: {
+          reporterId: reporterId,
+          postStatus: "rejected"
+        }
+      }
+    });
+
+    console.log("Found rejected ads for reporter:", matchedAds.length);
+
+    // Process ads to include reporter-specific rejection data
+    const processedAds = matchedAds.map(ad => {
+      // Find the current reporter's rejection data
+      const reporterRejection = ad.acceptRejectReporterList.find(
+        reporter => reporter.reporterId && reporter.reporterId.toString() === reporterId.toString() && reporter.postStatus === "rejected"
+      );
+
+      return {
+        ...ad.toObject(),
+        rejectNote: reporterRejection?.rejectNote || "No reason provided",
+        rejectedAt: reporterRejection?.rejectedAt
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Ads fetched where reporter has responded",
+      data: processedAds
+    });
+
+  } catch (error) {
+    console.error("Error fetching rejected ads:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching ads"
+    });
+  }
 
 }
 
-module.exports = {getAcceptedAds, getRejectedAds}
+module.exports = { getAcceptedAds, getRejectedAds }

@@ -115,7 +115,7 @@ const markAdvertisementCompleted = async (req, res) => {
                 "proofs.$.adminRejectedAt": new Date(),
                 "proofs.$.adminRejectedBy": adminId,
                 "proofs.$.adminRejectedByName": adminName,
-                "proofs.$.adminRejectNote": `Advertisement marked as completed. ${rejectReason}. You did not complete your work on time.`
+                "proofs.$.adminRejectNote": `Advertisement marked as completed. ${rejectReason}.`
               }
             },
             { session }
@@ -134,7 +134,7 @@ const markAdvertisementCompleted = async (req, res) => {
               "acceptRejectReporterList.$.rejectedAt": new Date(),
               "acceptRejectReporterList.$.adminRejectedBy": adminId,
               "acceptRejectReporterList.$.adminRejectedByName": adminName,
-              "acceptRejectReporterList.$.rejectNote": `Advertisement marked as completed. ${rejectReason}. You did not complete your work on time.`
+              "acceptRejectReporterList.$.rejectNote": `Advertisement marked as completed. ${rejectReason}.`
             }
           },
           { session }
@@ -158,9 +158,25 @@ const markAdvertisementCompleted = async (req, res) => {
           reporterEmail: reporterEmail,
           reason: rejectReason
         });
-
-        console.log(`❌ Rejected reporter ${reporterName}: ${rejectReason}`);
       }
+    }
+
+    // ✅ ADDED: Handle Unfilled Slots (Reporters who never even accepted)
+    const unfilledSlots = (advertisement.requiredReporter || 0) - requiredReporters.length;
+    if (unfilledSlots > 0) {
+      console.log(`⚠️ Handling ${unfilledSlots} unfilled slots (never accepted by any reporter)`);
+      const unfilledRefundAmount = unfilledSlots * (advertisement.finalReporterPrice || 0);
+
+      completionResults.refundedReporters += unfilledSlots;
+      completionResults.totalRefundAmount += unfilledRefundAmount;
+      completionResults.refundDetails.push({
+        reporterId: null,
+        reporterName: "N/A (Unfilled Slot)",
+        amount: unfilledRefundAmount,
+        reason: "No reporter accepted this slot within 24 hours"
+      });
+
+      console.log(`💰 Will refund extra ₹${unfilledRefundAmount} for ${unfilledSlots} unfilled slots`);
     }
 
     // Process refunds to advertiser wallet if any (only if admin chose to refund)

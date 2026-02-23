@@ -52,16 +52,16 @@ const updateReporterDistribution = async (req, res) => {
 
     // Calculate views per reporter based on total required views
     const viewsPerReporter = Math.ceil(requiredViews / requiredReporter);
-    
+
     // Calculate reporter price per reporter
     const finalReporterPrice = viewsPerReporter * reporterPricePerView;
-    
+
     // Calculate total reporter budget
     const totalReporterBudget = finalReporterPrice * requiredReporter;
-    
+
     // Calculate admin commission
     const adminCommission = (totalReporterBudget * adminCommissionPercentage) / 100;
-    
+
     // Calculate total cost
     const totalCost = totalReporterBudget + adminCommission;
 
@@ -70,7 +70,7 @@ const updateReporterDistribution = async (req, res) => {
       adId,
       {
         requiredReporter: requiredReporter,
-        baseView: baseView,
+        baseView: viewsPerReporter, // ✅ Use calculated distributed views
         requiredViews: requiredViews,
         finalReporterPrice: finalReporterPrice,
         adminCommission: adminCommission,
