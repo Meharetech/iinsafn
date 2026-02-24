@@ -26,23 +26,16 @@ const submitAdProof = async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // ✅ Upload screenshot to Cloudinary
+    // ✅ Handle local file storage instead of Cloudinary for high performance
     let screenshotUrl = null;
-    try {
-      console.log("Uploading screenshot to Cloudinary...");
-      const cloudinaryResult = await uploadToCloudinary(screenshotFile.path);
-      screenshotUrl = cloudinaryResult.secure_url;
-      console.log("Screenshot uploaded successfully:", screenshotUrl);
-
-      // ✅ Delete local file after successful upload
-      if (fs.existsSync(screenshotFile.path)) {
-        fs.unlinkSync(screenshotFile.path);
-        console.log("Local file deleted:", screenshotFile.path);
-      }
-    } catch (uploadError) {
-      console.error("Cloudinary upload error:", uploadError);
+    if (screenshotFile) {
+      // Use the local server URL. In production, this would be your domain.
+      const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+      screenshotUrl = `${baseUrl}/upload/${screenshotFile.filename}`;
+      console.log("✅ Proof stored locally on server:", screenshotUrl);
+    } else {
       await session.abortTransaction();
-      return res.status(500).json({ message: "Failed to upload screenshot" });
+      return res.status(400).json({ message: "Screenshot file is required" });
     }
 
     // ✅ Get the ad

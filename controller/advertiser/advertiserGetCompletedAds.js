@@ -8,7 +8,7 @@ const advertiserGetCompletedAds = async (req, res) => {
     console.log(`📊 Fetching completed ads for advertiser: ${owner}`);
 
     // Step 1: Get all completed ads posted by this owner
-    const completedAds = await Adpost.find({ 
+    const completedAds = await Adpost.find({
       owner,
       status: "completed"
     });
@@ -36,29 +36,29 @@ const advertiserGetCompletedAds = async (req, res) => {
     // Step 4: Create enhanced response with ad details and associated proofs
     const enhancedAds = completedAds.map(ad => {
       // Find all proofs for this ad
-      const adProofDoc = allProofs.find(proofDoc => 
+      const adProofDoc = allProofs.find(proofDoc =>
         proofDoc.adId.toString() === ad._id.toString()
       );
 
       // Extract individual reporter proofs that are completed
-      const reporterProofs = adProofDoc && adProofDoc.proofs 
-        ? adProofDoc.proofs.filter(proof => 
-            proof.status === "completed" && proof.adminApprovedAt
-          ).map(proof => ({
-            reporterId: proof.reporterId?._id,
-            iinsafId: proof.reporterId?.iinsafId || 'N/A',
-            reporterName: proof.reporterId?.name || 'N/A',
-            reporterEmail: proof.reporterId?.email || 'N/A',
-            platform: proof.platform,
-            channelName: proof.channelName,
-            videoLink: proof.videoLink,
-            duration: proof.duration,
-            submittedAt: proof.submittedAt,
-            completionSubmittedAt: proof.completionSubmittedAt,
-            adminApprovedAt: proof.adminApprovedAt,
-            status: proof.status,
-            completedTaskScreenshot: proof.completedTaskScreenshot
-          }))
+      const reporterProofs = adProofDoc && adProofDoc.proofs
+        ? adProofDoc.proofs.filter(proof =>
+          proof.status === "completed" && proof.adminApprovedAt
+        ).map(proof => ({
+          reporterId: proof.reporterId?._id,
+          iinsafId: proof.reporterId?.iinsafId || 'N/A',
+          reporterName: proof.reporterId?.name || 'N/A',
+          reporterEmail: proof.reporterId?.email || 'N/A',
+          platform: proof.platform,
+          channelName: proof.channelName,
+          videoLink: proof.videoLink,
+          duration: proof.duration,
+          submittedAt: proof.submittedAt,
+          completionSubmittedAt: proof.completionSubmittedAt,
+          adminApprovedAt: proof.adminApprovedAt,
+          status: proof.status,
+          completedTaskScreenshot: proof.completedTaskScreenshot
+        }))
         : [];
 
       return {
@@ -107,16 +107,16 @@ const advertiserGetCompletedAds = async (req, res) => {
 
     console.log(`✅ Enhanced ${enhancedAds.length} completed advertisements with proofs`);
 
-    return res.status(200).json({ 
+    return res.status(200).json({
       completedProofs: enhancedAds,
       totalCount: enhancedAds.length,
       message: "Completed advertisements with detailed information fetched successfully"
     });
   } catch (error) {
     console.error("❌ Error fetching completed ad proofs:", error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       message: "Server error while fetching completed advertisements.",
-      error: error.message 
+      error: error.message
     });
   }
 };

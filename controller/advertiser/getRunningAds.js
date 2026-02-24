@@ -141,9 +141,9 @@ const getRunningAds = async (req, res) => {
 
       // ✅ FILTER: Only show proofs where initial proof is APPROVED (status: "approved" or "submitted" or "completed")
       // Don't show "pending" or "rejected" proofs to advertisers
-      const approvedProofs = allProofs.filter((proof) => 
-        proof.status === "approved" || 
-        proof.status === "submitted" || 
+      const approvedProofs = allProofs.filter((proof) =>
+        proof.status === "approved" ||
+        proof.status === "submitted" ||
         proof.status === "completed"
       );
 

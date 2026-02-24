@@ -5,6 +5,7 @@ const proofSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true,
+    index: true, // Optimized for 100k+ users
   },
   iinsafId: {
     type: String,
@@ -38,7 +39,7 @@ const proofSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
-  status: { 
+  status: {
     type: String,
     enum: ['pending', 'accepted', 'submitted', 'approved', 'rejected', 'completed'],
     default: 'submitted'

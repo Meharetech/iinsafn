@@ -205,7 +205,7 @@ advertisementSchema.pre("save", function (next) {
   if (this.acceptRejectReporterList && Array.isArray(this.acceptRejectReporterList)) {
     const validStatuses = ["pending", "accepted", "submitted", "completed", "rejected", "proof_submitted", "proof_rejected"];
     let fixedCount = 0;
-    
+
     this.acceptRejectReporterList.forEach((entry) => {
       if (entry.postStatus && !validStatuses.includes(entry.postStatus)) {
         console.log(`⚠️ Auto-fixing invalid postStatus "${entry.postStatus}" - replacing with "accepted"`);
@@ -213,7 +213,7 @@ advertisementSchema.pre("save", function (next) {
         fixedCount++;
       }
     });
-    
+
     if (fixedCount > 0) {
       console.log(`✅ Fixed ${fixedCount} invalid postStatus value(s) in acceptRejectReporterList`);
     }

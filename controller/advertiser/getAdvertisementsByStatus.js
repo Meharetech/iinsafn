@@ -6,7 +6,19 @@ const getAdvertisementsByStatus = async (req, res) => {
     const { status } = req.query;
     const userId = req.user._id;
 
-    const filteredAds = await Adpost.find({ owner: userId, status });
+    let query = { owner: userId };
+    if (status) {
+      if (status.includes(',')) {
+        query.status = { $in: status.split(',') };
+      } else {
+        query.status = status;
+      }
+    }
+
+    const filteredAds = await Adpost.find(query)
+      .populate('reporterId', 'name email mobile iinsafId state city profileImage')
+      .populate('acceptRejectReporterList.reporterId', 'name email mobile iinsafId state city profileImage')
+      .sort({ createdAt: -1 });
 
     res.status(200).json(filteredAds);
   } catch (error) {
@@ -20,7 +32,7 @@ const getAllAds = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const allAds = await Adpost.find({ owner: userId});
+    const allAds = await Adpost.find({ owner: userId });
 
     res.status(200).json(allAds);
   } catch (error) {
@@ -39,9 +51,9 @@ const getAdvertiserAcceptedReporters = async (req, res) => {
 
     // Fetch all ads of this advertiser that are not completed and pending
     const ads = await Adpost.find({
-  owner: advertiserId,
-  status: { $nin: ["completed", "pending"] }  // exclude both completed & pending
-});
+      owner: advertiserId,
+      status: { $nin: ["completed", "pending"] }  // exclude both completed & pending
+    });
 
     if (!ads.length) {
       return res.status(404).json({ success: false, message: "No ads found for this advertiser" });
@@ -56,6 +68,10 @@ const getAdvertiserAcceptedReporters = async (req, res) => {
         videoUrl: ad.videoUrl,
         requiredReporter: ad.requiredReporter,
         adTitle: ad.mediaDescription,
+        pfState: ad.pfState,
+        pfCities: ad.pfCities,
+        adminSelectState: ad.adminSelectState,
+        adminSelectCities: ad.adminSelectCities,
         totalReporters: ad.acceptRejectReporterList.length,
         acceptedCount: acceptedReporters.length,
         acceptedReporters
@@ -72,4 +88,4 @@ const getAdvertiserAcceptedReporters = async (req, res) => {
 
 
 
-module.exports = {getAdvertisementsByStatus, getAllAds, getAdvertiserAcceptedReporters}
+module.exports = { getAdvertisementsByStatus, getAllAds, getAdvertiserAcceptedReporters }

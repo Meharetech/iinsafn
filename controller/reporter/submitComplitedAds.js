@@ -35,22 +35,15 @@ const submitComplitedAds = async (req, res) => {
       return res.status(400).json({ message: "Platform, videoUrl, adId, and screenshot are required" });
     }
 
-    // ✅ Upload screenshot to Cloudinary
+    // ✅ Handle local file storage instead of Cloudinary for high performance
     let screenshotUrl = null;
-    try {
-      console.log("Uploading completion screenshot to Cloudinary...");
-      const cloudinaryResult = await uploadToCloudinary(screenshotFile.path, "ads/completion-screenshots");
-      screenshotUrl = cloudinaryResult.secure_url;
-      console.log("Completion screenshot uploaded successfully:", screenshotUrl);
-
-      // ✅ Delete local file after successful upload
-      if (fs.existsSync(screenshotFile.path)) {
-        fs.unlinkSync(screenshotFile.path);
-        console.log("Local file deleted:", screenshotFile.path);
-      }
-    } catch (uploadError) {
-      console.error("Cloudinary upload error:", uploadError);
-      return res.status(500).json({ message: "Failed to upload completion screenshot" });
+    if (screenshotFile) {
+      // Use the local server URL. In production, this would be your domain.
+      const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+      screenshotUrl = `${baseUrl}/upload/${screenshotFile.filename}`;
+      console.log("✅ Final Proof stored locally on server:", screenshotUrl);
+    } else {
+      return res.status(400).json({ message: "Screenshot file is required" });
     }
 
     // ✅ 1. Get Ad post details
