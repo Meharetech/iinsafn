@@ -167,8 +167,12 @@ const adminRejectInitialProof = async (req, res) => {
           "proofs.$[elem].initialProofRejectedByName": adminName,
         },
         $unset: {
-          "proofs.$[elem].screenshot": 1, // ✅ Remove rejected screenshot
-          "proofs.$[elem].submittedAt": 1, // ✅ Remove submission timestamp
+          "proofs.$[elem].screenshot": 1,
+          "proofs.$[elem].channelName": 1,
+          "proofs.$[elem].platform": 1,
+          "proofs.$[elem].videoLink": 1,
+          "proofs.$[elem].duration": 1,
+          "proofs.$[elem].submittedAt": 1,
           "proofs.$[elem].initialProofApprovedAt": 1,
           "proofs.$[elem].initialProofApprovedBy": 1,
         }
