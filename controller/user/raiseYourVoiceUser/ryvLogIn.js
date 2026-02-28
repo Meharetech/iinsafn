@@ -1,5 +1,5 @@
 const ryvUsers = require("../../../models/userModel/RaiseYourVoiceModel/raiseYourVoiceUsers");
-const sendWhatsappOtp = require("../../../utils/sendWhatsappOtp");
+const { sendOtpViaEmail } = require("../registerUser");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken")
 
@@ -60,31 +60,23 @@ const jwt = require("jsonwebtoken")
 
 const ryvLogIn = async (req, res) => {
   console.log("RYV login request body:", req.body);
-  const { phoneNumber } = req.body;
+  const { email } = req.body;
 
   try {
     // ✅ 1. Input validation
-    if (!phoneNumber) {
+    if (!email) {
       return res.status(400).json({
         success: false,
-        message: "Phone number is required.",
-      });
-    }
-
-    const mobileRegex = /^[6-9]\d{9}$/;
-    if (!mobileRegex.test(phoneNumber)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid phone number format.",
+        message: "Email is required.",
       });
     }
 
     // ✅ 2. Check if user exists
-    const user = await ryvUsers.findOne({ phoneNo: phoneNumber });
+    const user = await ryvUsers.findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found with the provided phone number.",
+        message: "User not found with the provided email address.",
       });
     }
 
@@ -110,22 +102,22 @@ const ryvLogIn = async (req, res) => {
 
     await user.save();
 
-    // ✅ 6. Send OTP safely
+    // ✅ 6. Send OTP safely to email
     try {
-      await sendWhatsappOtp(phoneNumber, otp, user.name);
-    } catch (waErr) {
-      console.error("WhatsApp OTP sending failed:", waErr.message);
+      await sendOtpViaEmail(user.email, otp, user.name);
+    } catch (emailErr) {
+      console.error("Email OTP sending failed:", emailErr.message);
       return res.status(500).json({
         success: false,
-        message: "Failed to send OTP via WhatsApp. Please try again later.",
+        message: "Failed to send OTP via email. Please try again later.",
       });
     }
 
     // ✅ 7. Success response
     res.status(200).json({
       success: true,
-      message: "OTP sent successfully. Please verify within 10 minutes.",
-      phoneNumber: user.phoneNo,
+      message: "OTP sent successfully to your registered email. Please verify within 10 minutes.",
+      email: user.email,
     });
   } catch (error) {
     console.error("Error during RYV login OTP flow:", error.message);
@@ -140,38 +132,38 @@ const ryvLogIn = async (req, res) => {
 
 
 const ryvLoginOtp = async (req, res) => {
-    const { phoneNumber, loginOtp } = req.body;
+  const { email, loginOtp } = req.body;
 
-    try {
-        const user = await ryvUsers.findOne({ phoneNo: phoneNumber });
+  try {
+    const user = await ryvUsers.findOne({ email: email.toLowerCase() });
 
-        if (!user || !user.loginOtp || !user.otpExpiry) {
-            return res.status(400).json({ message: "Invalid request or OTP expired" });
-        }
-
-        if (user.otpExpiry < Date.now()) {
-            return res.status(400).json({ message: "OTP expired" });
-        }
-
-        const hashedOtp = crypto.createHash("sha256").update(loginOtp).digest("hex");
-
-        if (hashedOtp !== user.loginOtp) {
-            return res.status(400).json({ message: "Incorrect OTP" });
-        }
-
-        user.loginOtp = undefined;
-        user.otpExpiry = undefined;
-        await user.save();
-
-        const token = jwt.sign({ userId: user._id.toString() }, process.env.JWT_SECRET, {
-            expiresIn: "7d",
-        });
-
-        res.status(200).json({ message: "Login successful", token });
-    } catch (error) {
-        console.error("OTP verification error:", error);
-        res.status(500).json({ message: "Internal server error" });
+    if (!user || !user.loginOtp || !user.otpExpiry) {
+      return res.status(400).json({ message: "Invalid request or OTP expired" });
     }
+
+    if (user.otpExpiry < Date.now()) {
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    const hashedOtp = crypto.createHash("sha256").update(loginOtp).digest("hex");
+
+    if (hashedOtp !== user.loginOtp) {
+      return res.status(400).json({ message: "Incorrect OTP" });
+    }
+
+    user.loginOtp = undefined;
+    user.otpExpiry = undefined;
+    await user.save();
+
+    const token = jwt.sign({ userId: user._id.toString() }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    res.status(200).json({ message: "Login successful", token });
+  } catch (error) {
+    console.error("OTP verification error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 };
 
-module.exports = {ryvLogIn, ryvLoginOtp}
+module.exports = { ryvLogIn, ryvLoginOtp }

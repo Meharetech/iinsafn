@@ -5,22 +5,21 @@ const jwt = require("jsonwebtoken");
 const axios = require("axios");
 
 const loginUser = async (req, res) => {
-  const { emailOrMobile, password } = req.body;
+  const { email, password } = req.body;
 
   try {
-    if (!emailOrMobile || !password) {
+    if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: "Email/Mobile and password are required",
+        message: "Email and password are required",
       });
     }
 
-    const identifier = String(emailOrMobile).trim();
+    const identifier = String(email).trim().toLowerCase();
     let user;
 
     // ✅ Regex for validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const mobileRegex = /^[6-9]\d{9}$/;
 
     if (emailRegex.test(identifier)) {
       // Email login
@@ -31,21 +30,10 @@ const loginUser = async (req, res) => {
           message: "No Press Conference user found for this email",
         });
       }
-    } else if (mobileRegex.test(identifier)) {
-      // Mobile login
-      user = await PressConferenceUser.findOne({ mobile: Number(identifier) });
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: "No Press Conference user found for this mobile number",
-        });
-      }
     } else {
       return res.status(400).json({
         success: false,
-        message: emailOrMobile.includes("@")
-          ? "Wrong email format"
-          : "Wrong mobile number format",
+        message: "Wrong email format",
       });
     }
 
@@ -86,10 +74,6 @@ const loginUser = async (req, res) => {
 
       transporter.sendMail(mailOptions).catch((err) => {
         console.error("Email notification failed:", err.message);
-      });
-
-      sendOtpViaWATemplate(user.mobile, user.name, "press_login_msg").catch((err) => {
-        console.error("WhatsApp notification failed:", err.message);
       });
     } catch (notifyErr) {
       console.error("Notification error:", notifyErr.message);
@@ -138,27 +122,6 @@ const loginUser = async (req, res) => {
       success: false,
       message: "Server error. Please try again later.",
     });
-  }
-};
-
-const sendOtpViaWATemplate = async (mobile, userName, campaignName) => {
-  try {
-    const apiKey = process.env.AISENSY_API_KEY;
-
-    const response = await axios.post("https://backend.aisensy.com/campaign/t1/api/v2", {
-      apiKey,
-      campaignName,
-      destination: `91${mobile}`,
-      userName,
-      templateParams: [userName], // must match your template setup in AiSensy
-      paramsFallbackValue: { FirstName: userName },
-    });
-
-    return response.data;
-
-  } catch (error) {
-    console.error("Error sending WhatsApp press conference login notification:", error?.response?.data || error.message);
-    throw new Error("Failed to send WhatsApp notification");
   }
 };
 

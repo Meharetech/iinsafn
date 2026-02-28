@@ -51,72 +51,11 @@ const generateUniquePressConferenceId = async () => {
   return uniqueId;
 };
 
-const sendOtpViaSMS = async (mobile, otp, userName) => {
-  try {
-    const apiKey = process.env.AISENSY_API_KEY;
-    
-    // Validate required parameters
-    if (!apiKey) {
-      throw new Error("AISENSY_API_KEY is not configured");
-    }
-    
-    if (!mobile || !otp) {
-      throw new Error("Mobile number and OTP are required");
-    }
-
-    // Clean and validate userName
-    let cleanUserName = userName ? userName.trim() : "User";
-    if (!cleanUserName || cleanUserName.length === 0 || cleanUserName.trim().length === 0) {
-      console.warn("Invalid userName format, using fallback:", userName);
-      cleanUserName = "User";
-    }
-
-    const requestData = {
-      apiKey,
-      campaignName: "copy_otp",
-      destination: `91${mobile}`,
-      userName: cleanUserName,
-      templateParams: [`${otp}`],
-      buttons: [
-        {
-          type: "button",
-          sub_type: "url",
-          index: 0,
-          parameters: [
-            {
-              type: "text",
-              text: `${otp}`,
-            },
-          ],
-        },
-      ],
-    };
-
-    console.log("Sending WhatsApp OTP request:", {
-      destination: requestData.destination,
-      userName: cleanUserName,
-      campaignName: requestData.campaignName
-    });
-
-    const response = await axios.post(
-      "https://backend.aisensy.com/campaign/t1/api/v2",
-      requestData
-    );
-
-    console.log("WhatsApp OTP response:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error(
-      "Error sending WhatsApp OTP:",
-      error?.response?.data || error.message
-    );
-    throw new Error("Failed to send WhatsApp OTP");
-  }
-};
+// sendOtpViaSMS removed for WhatsApp removal
 
 const sendOtpViaEmail = async (email, otp, userName) => {
   const emailHtml = getPressConferenceTemplate(userName || "User", otp, "complete your registration");
-  
+
   await sendEmail(
     email,
     "Press Conference Registration - OTP Verification",
@@ -139,15 +78,14 @@ const verifyOtp = async (req, res) => {
     });
   }
 
-  const { emailOtp, mobileOtp, otpExpiry } = userData;
+  const { emailOtp, otpExpiry } = userData;
   const isEmailOtpValid = emailOtp === otpEmail?.toString().trim();
-  const isMobileOtpValid = mobileOtp === otpMobile?.toString().trim();
   const isOtpExpired = Date.now() > otpExpiry;
 
-  if (!isEmailOtpValid || !isMobileOtpValid || isOtpExpired) {
-    return res.status(400).json({ 
+  if (!isEmailOtpValid || isOtpExpired) {
+    return res.status(400).json({
       success: false,
-      message: "Invalid or expired OTP" 
+      message: "Invalid or expired OTP"
     });
   }
 
@@ -161,7 +99,7 @@ const verifyOtp = async (req, res) => {
     });
 
     await user.save();
-    
+
     // Create wallet for the new press user with default balance 0
     const wallet = new Wallet({
       userId: user._id,
@@ -169,10 +107,10 @@ const verifyOtp = async (req, res) => {
       balance: 0,
       transactions: []
     });
-    
+
     await wallet.save();
     console.log(`✅ Wallet created for press user: ${user._id} with balance: ₹0`);
-    
+
     pendingPressRegistrations.delete(key);
 
     return res.status(200).json({
@@ -191,7 +129,7 @@ const verifyOtp = async (req, res) => {
 
 const preRegisterUser = async (req, res) => {
   console.log("Press Conference registration request received:", req.body);
-  
+
   const {
     name,
     residenceaddress,
@@ -233,11 +171,11 @@ const preRegisterUser = async (req, res) => {
 
     // ✅ Check if user already exists in Press Conference panel only
     console.log("Checking for existing Press Conference user...");
-    const existingUser = await PressConferenceUser.findOne({ 
+    const existingUser = await PressConferenceUser.findOne({
       $or: [
-        { email: email.toLowerCase() }, 
-        { mobile } 
-      ] 
+        { email: email.toLowerCase() },
+        { mobile }
+      ]
     });
     if (existingUser) {
       console.log("Existing user found:", existingUser.email);
@@ -250,8 +188,7 @@ const preRegisterUser = async (req, res) => {
     }
     console.log("No existing user found, proceeding with registration...");
 
-    // ✅ Generate OTPs
-    const mobileOtp = crypto.randomInt(100000, 999999).toString();
+    // ✅ Generate OTP
     const emailOtp = crypto.randomInt(100000, 999999).toString();
     const otpExpiry = Date.now() + 3 * 60 * 1000; // 3 minutes
 
@@ -275,18 +212,15 @@ const preRegisterUser = async (req, res) => {
       organization,
       designation,
       mediaType,
-      mobileOtp,
       emailOtp,
       otpExpiry,
     });
 
-    // ✅ Send OTPs
-    console.log("Sending OTPs...");
+    // ✅ Send OTP
+    console.log("Sending OTP...");
     try {
       await sendOtpViaEmail(email, emailOtp, name);
       console.log("Email OTP sent successfully");
-      await sendOtpViaSMS(mobile, mobileOtp, name);
-      console.log("WhatsApp OTP sent successfully");
     } catch (otpError) {
       console.error("OTP sending error:", otpError);
       // Continue with registration even if OTP sending fails
@@ -294,7 +228,7 @@ const preRegisterUser = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "OTPs sent to email and mobile. Please verify to complete Press Conference registration.",
+      message: "OTP sent to email. Please verify to complete Press Conference registration.",
     });
   } catch (err) {
     console.error("Press Conference pre-registration error:", err);
@@ -325,24 +259,21 @@ const resendOtp = async (req, res) => {
   }
 
   try {
-    // Generate new OTPs
-    const newMobileOtp = crypto.randomInt(100000, 999999).toString();
+    // Generate new OTP
     const newEmailOtp = crypto.randomInt(100000, 999999).toString();
     const newOtpExpiry = Date.now() + 3 * 60 * 1000; // reset to 3 minutes
 
-    // Update stored OTPs
-    userData.mobileOtp = newMobileOtp;
+    // Update stored OTP
     userData.emailOtp = newEmailOtp;
     userData.otpExpiry = newOtpExpiry;
     pendingPressRegistrations.set(key, userData);
 
-    // Send OTPs again
+    // Send OTP again
     await sendOtpViaEmail(email, newEmailOtp, userData.name);
-    await sendOtpViaSMS(mobile, newMobileOtp, userData.name);
 
     return res.status(200).json({
       success: true,
-      message: "New OTPs sent successfully for Press Conference registration.",
+      message: "New OTP sent successfully for Press Conference registration.",
     });
   } catch (err) {
     console.error("Resend OTP error:", err);
@@ -353,10 +284,9 @@ const resendOtp = async (req, res) => {
   }
 };
 
-module.exports = { 
-  preRegisterUser, 
-  verifyOtp, 
-  sendOtpViaSMS, 
-  sendOtpViaEmail, 
-  resendOtp 
+module.exports = {
+  preRegisterUser,
+  verifyOtp,
+  sendOtpViaEmail,
+  resendOtp
 };

@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const podcastOtpStoreSchema = new mongoose.Schema({
   phoneNo: {
     type: String,
-    required: true,
+    required: false,
     trim: true,
     match: [/^\d{10}$/, 'Phone number must be exactly 10 digits']
   },
@@ -14,11 +14,6 @@ const podcastOtpStoreSchema = new mongoose.Schema({
     trim: true
   },
   emailOtp: {
-    type: String,
-    required: true,
-    length: 6
-  },
-  whatsappOtp: {
     type: String,
     required: true,
     length: 6
@@ -51,7 +46,7 @@ podcastOtpStoreSchema.index({ phoneNo: 1, email: 1 });
 podcastOtpStoreSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL index
 
 // Pre-save middleware to set expiration time
-podcastOtpStoreSchema.pre('save', function(next) {
+podcastOtpStoreSchema.pre('save', function (next) {
   if (this.isNew) {
     this.expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes from now
   }
@@ -59,29 +54,32 @@ podcastOtpStoreSchema.pre('save', function(next) {
 });
 
 // Method to check if OTP is valid and not expired
-podcastOtpStoreSchema.methods.isValid = function() {
+podcastOtpStoreSchema.methods.isValid = function () {
   return !this.isUsed && this.expiresAt > new Date();
 };
 
 // Method to mark OTP as used
-podcastOtpStoreSchema.methods.markAsUsed = function() {
+podcastOtpStoreSchema.methods.markAsUsed = function () {
   this.isUsed = true;
   return this.save();
 };
 
 // Static method to find valid OTP
-podcastOtpStoreSchema.statics.findValidOtp = function(phoneNo, email, otpType = 'registration') {
-  return this.findOne({
-    phoneNo,
+podcastOtpStoreSchema.statics.findValidOtp = function (phoneNo, email, otpType = 'registration') {
+  const query = {
     email,
     otpType,
     isUsed: false,
     expiresAt: { $gt: new Date() }
-  });
+  };
+  if (phoneNo) {
+    query.phoneNo = phoneNo;
+  }
+  return this.findOne(query);
 };
 
 // Static method to clean expired OTPs
-podcastOtpStoreSchema.statics.cleanExpiredOtps = function() {
+podcastOtpStoreSchema.statics.cleanExpiredOtps = function () {
   return this.deleteMany({
     $or: [
       { expiresAt: { $lt: new Date() } },

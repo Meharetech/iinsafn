@@ -133,14 +133,14 @@ const createSubAdmin = async (req, res) => {
     const normalizedAssignedSections = Array.isArray(assignedSections)
       ? assignedSections.map((s) => s.toLowerCase())
       : assignedSections
-      ? [assignedSections.toLowerCase()]
-      : [];
+        ? [assignedSections.toLowerCase()]
+        : [];
 
     const normalizedAccessPaths = Array.isArray(accessPaths)
       ? accessPaths
       : accessPaths
-      ? [accessPaths]
-      : [];
+        ? [accessPaths]
+        : [];
 
     console.log("Normalized assignedSections:", normalizedAssignedSections);
     console.log("Normalized accessPaths:", normalizedAccessPaths);
@@ -150,7 +150,6 @@ const createSubAdmin = async (req, res) => {
 
     // ✅ 6. Generate OTPs
     const emailOtp = crypto.randomInt(100000, 999999).toString();
-    const mobileOtp = crypto.randomInt(100000, 999999).toString();
 
     // ✅ 7. Create or update temp admin record
     let tempAdmin = await AdminOtp.findOne({ email });
@@ -163,7 +162,6 @@ const createSubAdmin = async (req, res) => {
       mobileNumber,
       password: hashedPassword,
       emailOtp,
-      mobileOtp,
       assignedSections: normalizedAssignedSections,
       accessPaths: normalizedAccessPaths,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 min expiry
@@ -176,12 +174,6 @@ const createSubAdmin = async (req, res) => {
       await sendOtpViaEmail(email, emailOtp);
     } catch (emailErr) {
       console.error("⚠️ Email OTP sending failed:", emailErr.message);
-    }
-
-    try {
-      await sendOtpViaSMS(mobileNumber, mobileOtp, name);
-    } catch (smsErr) {
-      console.error("⚠️ SMS OTP sending failed:", smsErr.message);
     }
 
     // ✅ 9. Success response
@@ -321,4 +313,4 @@ const updateSubAdmin = async (req, res) => {
 
 
 
-module.exports = {createSubAdmin, deleteSubAdmin, getSubAdminById, updateSubAdmin}
+module.exports = { createSubAdmin, deleteSubAdmin, getSubAdminById, updateSubAdmin }

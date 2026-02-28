@@ -3,10 +3,7 @@ const AdminOtp = require("../../../models/adminModels/adminRegistration/tempAdmi
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const {
-  sendOtpViaSMS,
-  sendOtpViaEmail,
-} = require("../../../controller/user/registerUser");
+const { sendOtpViaEmail } = require("../../../controller/user/registerUser");
 
 const adminRegistration = async (req, res) => {
   try {
@@ -31,7 +28,6 @@ const adminRegistration = async (req, res) => {
 
     // Generate OTPs
     const emailOtp = crypto.randomInt(100000, 999999).toString();
-    const mobileOtp = crypto.randomInt(100000, 999999).toString();
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -44,7 +40,6 @@ const adminRegistration = async (req, res) => {
         mobileNumber,
         password: hashedPassword,
         emailOtp,
-        mobileOtp,
         expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
       },
       { upsert: true }
@@ -52,12 +47,11 @@ const adminRegistration = async (req, res) => {
 
     // Send OTPs
     await sendOtpViaEmail(email, emailOtp);
-    await sendOtpViaSMS(mobileNumber, mobileOtp, name.trim());
 
     return res.status(200).json({
       success: true,
       message:
-        "OTPs sent to email and mobile. Please verify to complete registration.",
+        "OTP sent to email. Please verify to complete registration.",
     });
   } catch (error) {
     console.error("Error in registering admin:", error);
@@ -67,9 +61,9 @@ const adminRegistration = async (req, res) => {
 
 const verifyAdminOtp = async (req, res) => {
   try {
-    const { email, emailOtp, mobileOtp } = req.body;
+    const { email, emailOtp } = req.body;
 
-    if (!email || !emailOtp || !mobileOtp) {
+    if (!email || !emailOtp) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -80,10 +74,7 @@ const verifyAdminOtp = async (req, res) => {
         .json({ message: "OTP record not found. Please resend OTP." });
     }
 
-    if (
-      otpRecord.emailOtp !== emailOtp.trim() ||
-      otpRecord.mobileOtp !== mobileOtp.trim()
-    ) {
+    if (otpRecord.emailOtp !== emailOtp.trim()) {
       return res.status(400).json({ message: "Invalid OTPs provided." });
     }
 
@@ -110,7 +101,7 @@ const verifyAdminOtp = async (req, res) => {
       }
     }
 
-        // Create the admin
+    // Create the admin
     const newAdmin = new Admin({
       name: otpRecord.name,
       email: otpRecord.email,
@@ -144,9 +135,8 @@ const verifyAdminOtp = async (req, res) => {
       (err, token) => {
         if (err) throw err;
         return res.status(201).json({
-          message: `${
-            role === "superadmin" ? "Super Admin" : "Sub Admin"
-          } registered successfully`,
+          message: `${role === "superadmin" ? "Super Admin" : "Sub Admin"
+            } registered successfully`,
           token,
           role: newAdmin.role,
           user: {

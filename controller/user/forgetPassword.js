@@ -27,13 +27,14 @@ const forgetPassword = async (req, res) => {
 
     // 4. Send email using new template
     const emailHtml = getPasswordResetTemplate(user.name || "User", otp);
-    
+
     await sendEmail(
       email,
       "Password Reset OTP - iinsaf Platform",
       `Your OTP to reset your password is: ${otp}. This OTP is valid for 15 minutes.`,
       emailHtml
     );
+    console.log(`[EMAIL OTP INFO] Sent Password Reset OTP: ${otp} to Email: ${email}`);
 
     res.status(200).json({ message: "OTP sent to your email" });
 
@@ -156,4 +157,4 @@ const updatePassword = async (req, res) => {
 
 
 
-module.exports = {forgetPassword, verifyOtpAndResetPassword, setNewPassword, verifyOldPassword, updatePassword}
+module.exports = { forgetPassword, verifyOtpAndResetPassword, setNewPassword, verifyOldPassword, updatePassword }

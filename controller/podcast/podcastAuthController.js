@@ -3,7 +3,6 @@ const PodcastOtpStore = require("../../models/podcastUser/podcastOtpStore");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const sendEmail = require("../../utils/sendEmail");
-const sendWhatsappOtp = require("../../utils/sendWhatsappOtp");
 const { getPodcastTemplate } = require("../../utils/emailTemplates");
 
 // Temporary storage for unverified podcast users (NOT in database)
@@ -84,9 +83,8 @@ const registerPodcastUser = async (req, res) => {
       });
     }
 
-    // Generate OTPs
+    // Generate OTP
     const emailOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    const whatsappOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiry = Date.now() + 3 * 60 * 1000; // 3 minutes
 
     // Store registration data temporarily (NOT in database yet)
@@ -103,7 +101,6 @@ const registerPodcastUser = async (req, res) => {
       city: city.trim(),
       pincode,
       emailOtp,
-      whatsappOtp,
       otpExpiry
     };
 
@@ -112,7 +109,7 @@ const registerPodcastUser = async (req, res) => {
     // Send OTP via email
     try {
       const emailHtml = getPodcastTemplate(name, emailOtp, "complete your registration");
-      
+
       await sendEmail(
         email,
         "Podcast Platform - Email Verification OTP",
@@ -123,16 +120,11 @@ const registerPodcastUser = async (req, res) => {
       console.error("Email sending failed:", emailError);
     }
 
-    // Send OTP via WhatsApp
-    try {
-      await sendWhatsappOtp(phoneNo, whatsappOtp, 'podcast_registration');
-    } catch (whatsappError) {
-      console.error("WhatsApp OTP sending failed:", whatsappError);
-    }
-
+    // ✅ 7. Send OTP successfully
+    // Success response
     res.status(200).json({
       success: true,
-      message: "OTP sent to your mobile and email. Please verify within 3 minutes.",
+      message: "OTP sent to your email. Please verify within 3 minutes.",
       data: {
         email: email.toLowerCase(),
         phoneNo: phoneNo
@@ -151,7 +143,7 @@ const registerPodcastUser = async (req, res) => {
 // Verify OTP for podcast user registration
 const verifyPodcastOtp = async (req, res) => {
   try {
-    const { phoneNo, email, emailOtp, whatsappotp } = req.body;
+    const { phoneNo, email, emailOtp } = req.body;
 
     // Find pending registration
     const key = `${email.toLowerCase()}|${phoneNo}`;
@@ -164,8 +156,8 @@ const verifyPodcastOtp = async (req, res) => {
       });
     }
 
-    // Verify OTPs
-    if (userData.emailOtp !== emailOtp || userData.whatsappOtp !== whatsappotp) {
+    // Verify OTP
+    if (userData.emailOtp !== emailOtp) {
       return res.status(400).json({
         success: false,
         message: "Invalid OTP. Please check and try again."
@@ -235,31 +227,28 @@ const verifyPodcastOtp = async (req, res) => {
 // Send OTP for podcast user login
 const sendPodcastLoginOtp = async (req, res) => {
   try {
-    const { phoneNumber } = req.body;
+    const { email } = req.body;
 
     // Find user
-    const user = await PodcastUser.findOne({ 
-      phoneNo: phoneNumber,
-      isActive: true 
+    const user = await PodcastUser.findOne({
+      email: email.toLowerCase(),
+      isActive: true
     });
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found with provided phone number"
+        message: "User not found with provided email address"
       });
     }
 
-    // Generate OTPs
+    // Generate OTP
     const emailOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    const whatsappOtp = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Store OTP in database
     const otpData = new PodcastOtpStore({
-      phoneNo: phoneNumber,
       email: user.email,
       emailOtp,
-      whatsappOtp,
       otpType: 'login'
     });
 
@@ -268,7 +257,7 @@ const sendPodcastLoginOtp = async (req, res) => {
     // Send OTP via email
     try {
       const emailHtml = getPodcastTemplate(user.name, emailOtp, "login to your account");
-      
+
       await sendEmail(
         user.email,
         "Podcast Platform - Login OTP",
@@ -279,16 +268,10 @@ const sendPodcastLoginOtp = async (req, res) => {
       console.error("Email sending failed:", emailError);
     }
 
-    // Send OTP via WhatsApp
-    try {
-      await sendWhatsappOtp(phoneNumber, whatsappOtp, 'podcast_login');
-    } catch (whatsappError) {
-      console.error("WhatsApp OTP sending failed:", whatsappError);
-    }
-
+    // Success response
     res.status(200).json({
       success: true,
-      message: "OTP sent successfully to your registered mobile and email"
+      message: "OTP sent successfully to your registered email"
     });
 
   } catch (error) {
@@ -303,23 +286,23 @@ const sendPodcastLoginOtp = async (req, res) => {
 // Verify OTP for podcast user login
 const verifyPodcastLoginOtp = async (req, res) => {
   try {
-    const { phoneNumber, loginOtp } = req.body;
+    const { email, loginOtp } = req.body;
 
     // Find user to get email
-    const user = await PodcastUser.findOne({ 
-      phoneNo: phoneNumber,
-      isActive: true 
+    const user = await PodcastUser.findOne({
+      email: email.toLowerCase(),
+      isActive: true
     });
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found with provided phone number"
+        message: "User not found with provided email address"
       });
     }
 
     // Find valid OTP
-    const otpData = await PodcastOtpStore.findValidOtp(phoneNumber, user.email, 'login');
+    const otpData = await PodcastOtpStore.findValidOtp(null, user.email, 'login');
 
     if (!otpData) {
       return res.status(400).json({
@@ -328,8 +311,8 @@ const verifyPodcastLoginOtp = async (req, res) => {
       });
     }
 
-    // Verify OTP (using whatsapp OTP for login)
-    if (otpData.whatsappOtp !== loginOtp) {
+    // Verify OTP
+    if (otpData.emailOtp !== loginOtp) {
       return res.status(400).json({
         success: false,
         message: "Invalid OTP. Please check and try again."
@@ -398,21 +381,19 @@ const resendPodcastOtp = async (req, res) => {
       });
     }
 
-    // Generate new OTPs
+    // Generate new OTP
     const emailOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    const whatsappOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiry = Date.now() + 3 * 60 * 1000; // 3 minutes
 
-    // Update stored OTPs
+    // Update stored OTP
     userData.emailOtp = emailOtp;
-    userData.whatsappOtp = whatsappOtp;
     userData.otpExpiry = otpExpiry;
     pendingPodcastRegistrations.set(key, userData);
 
     // Send OTP via email
     try {
       const emailHtml = getPodcastTemplate(userData.name, emailOtp, "verify your email address");
-      
+
       await sendEmail(
         email,
         "Podcast Platform - New Verification OTP",
@@ -423,16 +404,10 @@ const resendPodcastOtp = async (req, res) => {
       console.error("Email sending failed:", emailError);
     }
 
-    // Send OTP via WhatsApp
-    try {
-      await sendWhatsappOtp(phoneNo, whatsappOtp, 'podcast_registration');
-    } catch (whatsappError) {
-      console.error("WhatsApp OTP sending failed:", whatsappError);
-    }
-
+    // Success response
     res.status(200).json({
       success: true,
-      message: "New OTP sent successfully to your mobile and email"
+      message: "New OTP sent successfully to your email"
     });
 
   } catch (error) {
@@ -502,11 +477,11 @@ const updatePodcastUserProfile = async (req, res) => {
 
     // Check if email is already taken by another user
     if (updateData.email) {
-      const existingUser = await PodcastUser.findOne({ 
-        email: updateData.email, 
-        _id: { $ne: userId } 
+      const existingUser = await PodcastUser.findOne({
+        email: updateData.email,
+        _id: { $ne: userId }
       });
-      
+
       if (existingUser) {
         return res.status(400).json({
           success: false,
@@ -517,11 +492,11 @@ const updatePodcastUserProfile = async (req, res) => {
 
     // Check if phone number is already taken by another user
     if (updateData.phoneNo) {
-      const existingUser = await PodcastUser.findOne({ 
-        phoneNo: updateData.phoneNo, 
-        _id: { $ne: userId } 
+      const existingUser = await PodcastUser.findOne({
+        phoneNo: updateData.phoneNo,
+        _id: { $ne: userId }
       });
-      
+
       if (existingUser) {
         return res.status(400).json({
           success: false,

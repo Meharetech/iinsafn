@@ -1,6 +1,5 @@
 const ryvUsers = require("../../../models/userModel/RaiseYourVoiceModel/raiseYourVoiceUsers");
 const crypto = require("crypto");
-const sendWhatsappOtp = require("../../../utils/sendWhatsappOtp");
 const { sendOtpViaEmail } = require("../../../controller/user/registerUser");
 const jwt = require("jsonwebtoken");
 
@@ -164,8 +163,7 @@ const registerRyvUser = async (req, res) => {
       });
     }
 
-    // ✅ 4. Generate OTPs
-    const mobileOtp = crypto.randomInt(100000, 999999).toString();
+    // ✅ 4. Generate OTP
     const emailOtp = crypto.randomInt(100000, 999999).toString();
     const otpExpiry = Date.now() + 3 * 60 * 1000;
 
@@ -181,7 +179,6 @@ const registerRyvUser = async (req, res) => {
       city,
       residenceAddress,
       dateOfBirth,
-      mobileOtp,
       emailOtp,
       otpExpiry
     };
@@ -190,17 +187,7 @@ const registerRyvUser = async (req, res) => {
     const key = `${email.toLowerCase()}|${phoneNo}`;
     pendingRyvRegistrations.set(key, registrationData);
 
-    // ✅ 7. Send OTPs safely
-    try {
-      await sendWhatsappOtp(phoneNo, mobileOtp, name);
-    } catch (waErr) {
-      console.error("WhatsApp OTP sending failed:", waErr.message);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to send WhatsApp OTP. Please try again later.",
-      });
-    }
-
+    // ✅ 7. Send OTP safely
     try {
       await sendOtpViaEmail(email, emailOtp);
     } catch (emailErr) {
@@ -215,7 +202,7 @@ const registerRyvUser = async (req, res) => {
     return res.status(200).json({
       success: true,
       message:
-        "OTP sent to your mobile and email. Please verify within 3 minutes.",
+        "OTP sent to your email. Please verify within 3 minutes.",
     });
   } catch (error) {
     console.error("Error during RYV registration:", error.message);
@@ -231,19 +218,18 @@ const registerRyvUser = async (req, res) => {
 
 const verifyOtpForRyvUser = async (req, res) => {
   console.log("🔍 RYV OTP Verification Debug - Request body:", req.body);
-  
-  const { phoneNo, whatsappotp, emailOtp, email } = req.body;
+
+  const { phoneNo, emailOtp, email } = req.body;
 
   console.log("🔍 RYV OTP Verification Debug - Extracted fields:");
   console.log("  - phoneNo:", phoneNo);
-  console.log("  - whatsappotp:", whatsappotp);
   console.log("  - emailOtp:", emailOtp);
   console.log("  - email:", email);
 
-  if (!phoneNo || !whatsappotp || !emailOtp || !email) {
+  if (!phoneNo || !emailOtp || !email) {
     console.log("❌ RYV OTP Verification - Missing required fields");
     return res.status(400).json({
-      message: "Phone number, email, mobile OTP, and email OTP are required.",
+      message: "Phone number, email, and email OTP are required.",
     });
   }
 
@@ -267,17 +253,15 @@ const verifyOtpForRyvUser = async (req, res) => {
       currentTime: Date.now()
     });
 
-    // Verify OTPs
+    // Verify OTP
     const isEmailOtpValid = userData.emailOtp === emailOtp?.toString().trim();
-    const isMobileOtpValid = userData.mobileOtp === whatsappotp?.toString().trim();
     const isOtpExpired = Date.now() > userData.otpExpiry;
 
     console.log("🔍 RYV OTP Verification Debug - Validation results:");
     console.log("  - isEmailOtpValid:", isEmailOtpValid);
-    console.log("  - isMobileOtpValid:", isMobileOtpValid);
     console.log("  - isOtpExpired:", isOtpExpired);
 
-    if (!isEmailOtpValid || !isMobileOtpValid || isOtpExpired) {
+    if (!isEmailOtpValid || isOtpExpired) {
       console.log("❌ RYV OTP Verification - Invalid or expired OTP");
       return res.status(400).json({
         success: false,

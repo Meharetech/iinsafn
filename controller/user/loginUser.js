@@ -90,10 +90,6 @@ const loginUser = async (req, res) => {
       transporter.sendMail(mailOptions).catch((err) => {
         console.error("Email notification failed:", err.message);
       });
-
-      sendOtpViaWATemplate(user.mobile, user.name, "login_msg").catch((err) => {
-        console.error("WhatsApp notification failed:", err.message);
-      });
     } catch (notifyErr) {
       console.error("Notification error:", notifyErr.message);
     }
@@ -136,30 +132,6 @@ const loginUser = async (req, res) => {
       success: false,
       message: "Server error. Please try again later.",
     });
-  }
-};
-
-
-
-const sendOtpViaWATemplate = async (mobile, userName, campaignName) => {
-  try {
-
-    const apiKey = process.env.AISENSY_API_KEY;
-
-    const response = await axios.post("https://backend.aisensy.com/campaign/t1/api/v2", {
-      apiKey,
-      campaignName,
-      destination: `91${mobile}`,
-      userName,
-      templateParams: [userName], // must match your template setup in AiSensy
-      paramsFallbackValue: { FirstName: userName },
-    });
-
-    return response.data;
-
-  } catch (error) {
-    console.error("Error sending WhatsApp login notification:", error?.response?.data || error.message);
-    throw new Error("Failed to send WhatsApp notification");
   }
 };
 

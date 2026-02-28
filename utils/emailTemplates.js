@@ -262,7 +262,7 @@ const getOtpTemplate = (userName, otp, purpose, validityMinutes = 10) => {
     
     <p>If you have any questions or need assistance, please contact our support team.</p>
   `;
-  
+
   return getBaseTemplate("OTP Verification", content);
 };
 
@@ -283,7 +283,7 @@ const getRegistrationSuccessTemplate = (userName, userRole) => {
     
     <p>We're excited to have you on board! If you have any questions, feel free to reach out to our support team.</p>
   `;
-  
+
   return getBaseTemplate("Registration Successful", content);
 };
 
@@ -309,7 +309,7 @@ const getPasswordResetTemplate = (userName, otp) => {
     
     <p>If you continue to have issues, please contact our support team for assistance.</p>
   `;
-  
+
   return getBaseTemplate("Password Reset", content);
 };
 
@@ -319,11 +319,11 @@ const getNotificationTemplate = (title, message, actionText = null, actionUrl = 
     <h2>${title}</h2>
     <p>${message}</p>
   `;
-  
+
   if (actionText && actionUrl) {
     content += `<a href="${actionUrl}" class="button">${actionText}</a>`;
   }
-  
+
   return getBaseTemplate(title, content);
 };
 
@@ -349,7 +349,7 @@ const getPressConferenceTemplate = (userName, otp, purpose) => {
     
     <p>Thank you for using our Press Conference platform!</p>
   `;
-  
+
   return getBaseTemplate("Press Conference Verification", content);
 };
 
@@ -375,7 +375,7 @@ const getPodcastTemplate = (userName, otp, purpose) => {
     
     <p>Welcome to our Podcast platform! We're excited to have you join our community.</p>
   `;
-  
+
   return getBaseTemplate("Podcast Platform Verification", content);
 };
 
@@ -402,7 +402,7 @@ const getRaiseYourVoiceTemplate = (adminName, userName, userEmail, description) 
     
     <p>Thank you for maintaining the quality of our platform.</p>
   `;
-  
+
   return getBaseTemplate("New Raise Your Voice Post", content);
 };
 
@@ -416,7 +416,7 @@ const sendEmail = async (to, subject, text, html) => {
       text,
       html,
     });
-    console.log(`✅ Email sent to ${to}`);
+    console.log(`✅ Email sent to ${to} | Content: ${text}`);
     return true;
   } catch (err) {
     console.error("❌ Email error:", err.message);

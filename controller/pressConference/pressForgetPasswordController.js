@@ -7,15 +7,16 @@ const { sendEmail, getPressConferenceTemplate } = require("../../utils/emailTemp
 const sendOtpViaEmail = async (email, otp, userName) => {
   try {
     const emailHtml = getPressConferenceTemplate(userName || "User", otp, "reset your password");
-    
+
     await sendEmail(
       email,
       "Press Conference - Password Reset OTP",
       `Your OTP code for password reset is ${otp}. It is valid for 10 minutes.`,
       emailHtml
     );
-    
+
     console.log(`✅ Password reset OTP sent to ${email}`);
+    console.log(`[EMAIL OTP INFO] Sent Password Reset OTP: ${otp} to Email: ${email}`);
   } catch (error) {
     console.error("❌ Error sending password reset OTP:", error);
     throw error;
@@ -37,7 +38,7 @@ const sendOtpForPasswordReset = async (req, res) => {
 
     // Find user by email
     const user = await PressConferenceUser.findOne({ email: email.toLowerCase() });
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -63,7 +64,7 @@ const sendOtpForPasswordReset = async (req, res) => {
     } catch (emailError) {
       console.error("❌ Failed to send OTP email:", emailError);
       console.log(`🔧 DEVELOPMENT FALLBACK - OTP for ${email}: ${otp}`);
-      
+
       // In development, still allow the process to continue
       // In production, you might want to return an error
       if (process.env.NODE_ENV === 'production') {
@@ -106,7 +107,7 @@ const verifyOtpForPasswordReset = async (req, res) => {
 
     // Find user by email
     const user = await PressConferenceUser.findOne({ email: email.toLowerCase() });
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -116,10 +117,10 @@ const verifyOtpForPasswordReset = async (req, res) => {
 
     // Check if OTP exists and is not expired
     if (!user.resetOTP || !user.resetOTPExpires) {
-      console.log("No OTP found for user:", { 
-        email: user.email, 
-        hasResetOTP: !!user.resetOTP, 
-        hasResetOTPExpires: !!user.resetOTPExpires 
+      console.log("No OTP found for user:", {
+        email: user.email,
+        hasResetOTP: !!user.resetOTP,
+        hasResetOTPExpires: !!user.resetOTPExpires
       });
       return res.status(400).json({
         success: false,
@@ -128,8 +129,8 @@ const verifyOtpForPasswordReset = async (req, res) => {
     }
 
     if (new Date() > user.resetOTPExpires) {
-      console.log("OTP expired for user:", { 
-        email: user.email, 
+      console.log("OTP expired for user:", {
+        email: user.email,
         otpExpires: user.resetOTPExpires,
         currentTime: new Date()
       });
@@ -140,10 +141,10 @@ const verifyOtpForPasswordReset = async (req, res) => {
     }
 
     // Verify OTP
-    console.log("Comparing OTPs:", { 
-      userOTP: user.resetOTP, 
-      providedOTP: otp, 
-      match: user.resetOTP === otp 
+    console.log("Comparing OTPs:", {
+      userOTP: user.resetOTP,
+      providedOTP: otp,
+      match: user.resetOTP === otp
     });
     if (user.resetOTP !== otp) {
       return res.status(400).json({
@@ -200,7 +201,7 @@ const resetPassword = async (req, res) => {
 
     // Find user by email
     const user = await PressConferenceUser.findOne({ email: email.toLowerCase() });
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -260,7 +261,7 @@ const resendOtpForPasswordReset = async (req, res) => {
 
     // Find user by email
     const user = await PressConferenceUser.findOne({ email: email.toLowerCase() });
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -286,7 +287,7 @@ const resendOtpForPasswordReset = async (req, res) => {
     } catch (emailError) {
       console.error("❌ Failed to resend OTP email:", emailError);
       console.log(`🔧 DEVELOPMENT FALLBACK - New OTP for ${email}: ${otp}`);
-      
+
       // In development, still allow the process to continue
       // In production, you might want to return an error
       if (process.env.NODE_ENV === 'production') {

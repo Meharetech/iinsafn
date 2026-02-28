@@ -52,7 +52,7 @@ const sendEmail = async (to, subject, text, html) => {
       text,
       html,
     });
-    console.log(`✅ Email sent to ${to}`);
+    console.log(`✅ Email sent to ${to} | Content: ${text}`);
     return true;
   } catch (err) {
     console.error("❌ Email error:", err.message);
