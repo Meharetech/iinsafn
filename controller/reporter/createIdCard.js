@@ -100,10 +100,16 @@ const createIdCard = async (req, res) => {
     const parsedPlatformLinks = JSON.parse(platformLinks || "{}");
 
     const formattedChannelLinks = Object.entries(parsedPlatformLinks).map(
-      ([platform, link]) => ({
-        platform,
-        link,
-      })
+      ([platform, link]) => {
+        let formattedLink = String(link).trim();
+        if (formattedLink && !/^https?:\/\//i.test(formattedLink)) {
+          formattedLink = "https://" + formattedLink;
+        }
+        return {
+          platform,
+          link: formattedLink,
+        };
+      }
     );
 
     const newIdCard = new genrateIdCard({
